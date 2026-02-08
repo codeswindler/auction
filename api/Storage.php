@@ -118,6 +118,78 @@ class Storage {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function listCampaigns($includeInactive = false) {
+        if ($includeInactive) {
+            $stmt = $this->pdo->query("SELECT * FROM campaigns ORDER BY id ASC");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+        $stmt = $this->pdo->prepare("SELECT * FROM campaigns WHERE is_active = 1 ORDER BY id ASC");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getCampaignById($id) {
+        $stmt = $this->pdo->prepare("SELECT * FROM campaigns WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function createCampaign($data) {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO campaigns (name, menu_title, root_prompt, bid_fee_min, bid_fee_max, bid_fee_prompt, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $data['name'],
+            $data['menuTitle'],
+            $data['rootPrompt'],
+            $data['bidFeeMin'],
+            $data['bidFeeMax'],
+            $data['bidFeePrompt'],
+            $data['isActive'] ? 1 : 0
+        ]);
+        return $this->getCampaignById($this->pdo->lastInsertId());
+    }
+
+    public function updateCampaign($id, $data) {
+        $fields = [];
+        $params = [];
+
+        foreach ([
+            'name' => 'name',
+            'menuTitle' => 'menu_title',
+            'rootPrompt' => 'root_prompt',
+            'bidFeeMin' => 'bid_fee_min',
+            'bidFeeMax' => 'bid_fee_max',
+            'bidFeePrompt' => 'bid_fee_prompt',
+            'isActive' => 'is_active'
+        ] as $inputKey => $column) {
+            if (array_key_exists($inputKey, $data)) {
+                $fields[] = "{$column} = ?";
+                $value = $data[$inputKey];
+                if ($inputKey === 'isActive') {
+                    $value = $value ? 1 : 0;
+                }
+                $params[] = $value;
+            }
+        }
+
+        if (!empty($fields)) {
+            $params[] = $id;
+            $stmt = $this->pdo->prepare("UPDATE campaigns SET " . implode(', ', $fields) . " WHERE id = ?");
+            $stmt->execute($params);
+        }
+
+        return $this->getCampaignById($id);
+    }
+
+    public function activateCampaign($id) {
+        $this->pdo->exec("UPDATE campaigns SET is_active = 0");
+        $stmt = $this->pdo->prepare("UPDATE campaigns SET is_active = 1 WHERE id = ?");
+        $stmt->execute([$id]);
+        return $this->getCampaignById($id);
+    }
+
     public function getActiveCampaign() {
         $stmt = $this->pdo->prepare("SELECT * FROM campaigns WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
         $stmt->execute();
@@ -142,6 +214,73 @@ class Storage {
         ");
         $stmt->execute([$campaignId]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getCampaignNodeById($campaignId, $nodeId) {
+        $stmt = $this->pdo->prepare("SELECT * FROM campaign_nodes WHERE campaign_id = ? AND id = ?");
+        $stmt->execute([$campaignId, $nodeId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    public function createCampaignNode($campaignId, $data) {
+        $stmt = $this->pdo->prepare("
+            INSERT INTO campaign_nodes (campaign_id, parent_id, label, prompt, action_type, action_payload, sort_order, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $campaignId,
+            $data['parentId'],
+            $data['label'],
+            $data['prompt'],
+            $data['actionType'],
+            $data['actionPayload'],
+            $data['sortOrder'],
+            $data['isActive'] ? 1 : 0
+        ]);
+        return $this->getCampaignNodeById($campaignId, $this->pdo->lastInsertId());
+    }
+
+    public function updateCampaignNode($campaignId, $nodeId, $data) {
+        $fields = [];
+        $params = [];
+
+        foreach ([
+            'parentId' => 'parent_id',
+            'label' => 'label',
+            'prompt' => 'prompt',
+            'actionType' => 'action_type',
+            'actionPayload' => 'action_payload',
+            'sortOrder' => 'sort_order',
+            'isActive' => 'is_active'
+        ] as $inputKey => $column) {
+            if (array_key_exists($inputKey, $data)) {
+                $fields[] = "{$column} = ?";
+                $value = $data[$inputKey];
+                if ($inputKey === 'isActive') {
+                    $value = $value ? 1 : 0;
+                }
+                $params[] = $value;
+            }
+        }
+
+        if (!empty($fields)) {
+            $params[] = $campaignId;
+            $params[] = $nodeId;
+            $stmt = $this->pdo->prepare("UPDATE campaign_nodes SET " . implode(', ', $fields) . " WHERE campaign_id = ? AND id = ?");
+            $stmt->execute($params);
+        }
+
+        return $this->getCampaignNodeById($campaignId, $nodeId);
+    }
+
+    public function deleteCampaignNode($campaignId, $nodeId) {
+        $node = $this->getCampaignNodeById($campaignId, $nodeId);
+        if (!$node) {
+            return null;
+        }
+        $stmt = $this->pdo->prepare("DELETE FROM campaign_nodes WHERE campaign_id = ? AND id = ?");
+        $stmt->execute([$campaignId, $nodeId]);
+        return $node;
     }
     
     /**

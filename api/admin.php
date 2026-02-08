@@ -13,7 +13,7 @@ requireAdminAuth();
 $storage = new Storage($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'];
-$path = $_SERVER['REQUEST_URI'] ?? '';
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
 
 // GET /api/admin/users
 if ($method === 'GET' && preg_match('#/api/admin/users$#', $path)) {
@@ -112,6 +112,288 @@ if ($method === 'GET' && preg_match('#/api/admin/check-super-admin$#', $path)) {
     $currentUsername = $_SESSION['admin_username'] ?? null;
     $isSuperAdmin = ($superAdminUsername && $currentUsername === $superAdminUsername);
     jsonResponse(['isSuperAdmin' => $isSuperAdmin]);
+}
+
+// GET /api/admin/campaigns - List campaigns
+if ($method === 'GET' && preg_match('#/api/admin/campaigns$#', $path)) {
+    try {
+        $includeInactive = isset($_GET['include_inactive']) && $_GET['include_inactive'] === 'true';
+        $campaigns = $storage->listCampaigns($includeInactive);
+        $result = array_map(function($c) {
+            return [
+                'id' => (int)$c['id'],
+                'name' => $c['name'],
+                'menuTitle' => $c['menu_title'],
+                'rootPrompt' => $c['root_prompt'],
+                'bidFeeMin' => $c['bid_fee_min'],
+                'bidFeeMax' => $c['bid_fee_max'],
+                'bidFeePrompt' => $c['bid_fee_prompt'],
+                'isActive' => (bool)$c['is_active'],
+                'createdAt' => $c['created_at'],
+            ];
+        }, $campaigns);
+        jsonResponse($result);
+    } catch (Exception $e) {
+        error_log("Admin campaigns list error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error fetching campaigns'], 500);
+    }
+}
+
+// POST /api/admin/campaigns - Create campaign
+if ($method === 'POST' && preg_match('#/api/admin/campaigns$#', $path)) {
+    try {
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
+
+        $name = trim($data['name'] ?? '');
+        $menuTitle = trim($data['menuTitle'] ?? '');
+        $rootPrompt = trim($data['rootPrompt'] ?? '');
+
+        if ($name === '' || $menuTitle === '' || $rootPrompt === '') {
+            jsonResponse(['error' => 'Name, Menu Title, and Root Prompt are required'], 400);
+        }
+
+        $bidFeeMin = isset($data['bidFeeMin']) ? floatval($data['bidFeeMin']) : 30;
+        $bidFeeMax = isset($data['bidFeeMax']) ? floatval($data['bidFeeMax']) : 99;
+        $bidFeePrompt = trim($data['bidFeePrompt'] ?? 'Please complete the bid on MPesa, ref: {{ref}}.');
+        $isActive = isset($data['isActive']) ? (bool)$data['isActive'] : false;
+
+        $campaign = $storage->createCampaign([
+            'name' => $name,
+            'menuTitle' => $menuTitle,
+            'rootPrompt' => $rootPrompt,
+            'bidFeeMin' => $bidFeeMin,
+            'bidFeeMax' => $bidFeeMax,
+            'bidFeePrompt' => $bidFeePrompt,
+            'isActive' => $isActive
+        ]);
+
+        if ($isActive && $campaign) {
+            $campaign = $storage->activateCampaign($campaign['id']);
+        }
+
+        jsonResponse([
+            'id' => (int)$campaign['id'],
+            'name' => $campaign['name'],
+            'menuTitle' => $campaign['menu_title'],
+            'rootPrompt' => $campaign['root_prompt'],
+            'bidFeeMin' => $campaign['bid_fee_min'],
+            'bidFeeMax' => $campaign['bid_fee_max'],
+            'bidFeePrompt' => $campaign['bid_fee_prompt'],
+            'isActive' => (bool)$campaign['is_active'],
+            'createdAt' => $campaign['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign create error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error creating campaign'], 500);
+    }
+}
+
+// PATCH /api/admin/campaigns/:id - Update campaign
+if ($method === 'PATCH' && preg_match('#/api/admin/campaigns/(\d+)$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
+
+        $payload = [];
+        foreach (['name', 'menuTitle', 'rootPrompt', 'bidFeeMin', 'bidFeeMax', 'bidFeePrompt', 'isActive'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $payload[$key] = $data[$key];
+            }
+        }
+
+        $campaign = $storage->updateCampaign($campaignId, $payload);
+        if (!$campaign) {
+            jsonResponse(['error' => 'Campaign not found'], 404);
+        }
+
+        if (isset($payload['isActive']) && $payload['isActive']) {
+            $campaign = $storage->activateCampaign($campaignId);
+        }
+
+        jsonResponse([
+            'id' => (int)$campaign['id'],
+            'name' => $campaign['name'],
+            'menuTitle' => $campaign['menu_title'],
+            'rootPrompt' => $campaign['root_prompt'],
+            'bidFeeMin' => $campaign['bid_fee_min'],
+            'bidFeeMax' => $campaign['bid_fee_max'],
+            'bidFeePrompt' => $campaign['bid_fee_prompt'],
+            'isActive' => (bool)$campaign['is_active'],
+            'createdAt' => $campaign['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign update error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error updating campaign'], 500);
+    }
+}
+
+// POST /api/admin/campaigns/:id/activate - Activate campaign
+if ($method === 'POST' && preg_match('#/api/admin/campaigns/(\d+)/activate$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $campaign = $storage->activateCampaign($campaignId);
+        if (!$campaign) {
+            jsonResponse(['error' => 'Campaign not found'], 404);
+        }
+        jsonResponse([
+            'id' => (int)$campaign['id'],
+            'name' => $campaign['name'],
+            'menuTitle' => $campaign['menu_title'],
+            'rootPrompt' => $campaign['root_prompt'],
+            'bidFeeMin' => $campaign['bid_fee_min'],
+            'bidFeeMax' => $campaign['bid_fee_max'],
+            'bidFeePrompt' => $campaign['bid_fee_prompt'],
+            'isActive' => (bool)$campaign['is_active'],
+            'createdAt' => $campaign['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign activate error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error activating campaign'], 500);
+    }
+}
+
+// GET /api/admin/campaigns/:id/nodes - List campaign nodes
+if ($method === 'GET' && preg_match('#/api/admin/campaigns/(\d+)/nodes$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $includeInactive = isset($_GET['include_inactive']) && $_GET['include_inactive'] === 'true';
+        $nodes = $storage->listCampaignNodes($campaignId, $includeInactive);
+        $result = array_map(function($n) {
+            return [
+                'id' => (int)$n['id'],
+                'campaignId' => (int)$n['campaign_id'],
+                'parentId' => $n['parent_id'] !== null ? (int)$n['parent_id'] : null,
+                'label' => $n['label'],
+                'prompt' => $n['prompt'],
+                'actionType' => $n['action_type'],
+                'actionPayload' => $n['action_payload'],
+                'sortOrder' => isset($n['sort_order']) ? (int)$n['sort_order'] : 0,
+                'isActive' => (bool)$n['is_active'],
+                'createdAt' => $n['created_at'],
+            ];
+        }, $nodes);
+        jsonResponse($result);
+    } catch (Exception $e) {
+        error_log("Admin campaign nodes list error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error fetching campaign nodes'], 500);
+    }
+}
+
+// POST /api/admin/campaigns/:id/nodes - Create campaign node
+if ($method === 'POST' && preg_match('#/api/admin/campaigns/(\d+)/nodes$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
+
+        $label = trim($data['label'] ?? '');
+        if ($label === '') {
+            jsonResponse(['error' => 'Label is required'], 400);
+        }
+
+        $node = $storage->createCampaignNode($campaignId, [
+            'parentId' => array_key_exists('parentId', $data) ? $data['parentId'] : null,
+            'label' => $label,
+            'prompt' => $data['prompt'] ?? null,
+            'actionType' => $data['actionType'] ?? null,
+            'actionPayload' => $data['actionPayload'] ?? null,
+            'sortOrder' => isset($data['sortOrder']) ? (int)$data['sortOrder'] : 0,
+            'isActive' => isset($data['isActive']) ? (bool)$data['isActive'] : true
+        ]);
+
+        jsonResponse([
+            'id' => (int)$node['id'],
+            'campaignId' => (int)$node['campaign_id'],
+            'parentId' => $node['parent_id'] !== null ? (int)$node['parent_id'] : null,
+            'label' => $node['label'],
+            'prompt' => $node['prompt'],
+            'actionType' => $node['action_type'],
+            'actionPayload' => $node['action_payload'],
+            'sortOrder' => isset($node['sort_order']) ? (int)$node['sort_order'] : 0,
+            'isActive' => (bool)$node['is_active'],
+            'createdAt' => $node['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign node create error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error creating campaign node'], 500);
+    }
+}
+
+// PATCH /api/admin/campaigns/:id/nodes/:nodeId - Update campaign node
+if ($method === 'PATCH' && preg_match('#/api/admin/campaigns/(\d+)/nodes/(\d+)$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $nodeId = (int)$matches[2];
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'Invalid JSON body'], 400);
+        }
+
+        $payload = [];
+        foreach (['parentId', 'label', 'prompt', 'actionType', 'actionPayload', 'sortOrder', 'isActive'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $payload[$key] = $data[$key];
+            }
+        }
+
+        $node = $storage->updateCampaignNode($campaignId, $nodeId, $payload);
+        if (!$node) {
+            jsonResponse(['error' => 'Campaign node not found'], 404);
+        }
+
+        jsonResponse([
+            'id' => (int)$node['id'],
+            'campaignId' => (int)$node['campaign_id'],
+            'parentId' => $node['parent_id'] !== null ? (int)$node['parent_id'] : null,
+            'label' => $node['label'],
+            'prompt' => $node['prompt'],
+            'actionType' => $node['action_type'],
+            'actionPayload' => $node['action_payload'],
+            'sortOrder' => isset($node['sort_order']) ? (int)$node['sort_order'] : 0,
+            'isActive' => (bool)$node['is_active'],
+            'createdAt' => $node['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign node update error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error updating campaign node'], 500);
+    }
+}
+
+// DELETE /api/admin/campaigns/:id/nodes/:nodeId - Delete campaign node
+if ($method === 'DELETE' && preg_match('#/api/admin/campaigns/(\d+)/nodes/(\d+)$#', $path, $matches)) {
+    try {
+        $campaignId = (int)$matches[1];
+        $nodeId = (int)$matches[2];
+
+        $node = $storage->deleteCampaignNode($campaignId, $nodeId);
+        if (!$node) {
+            jsonResponse(['error' => 'Campaign node not found'], 404);
+        }
+
+        jsonResponse([
+            'id' => (int)$node['id'],
+            'campaignId' => (int)$node['campaign_id'],
+            'parentId' => $node['parent_id'] !== null ? (int)$node['parent_id'] : null,
+            'label' => $node['label'],
+            'prompt' => $node['prompt'],
+            'actionType' => $node['action_type'],
+            'actionPayload' => $node['action_payload'],
+            'sortOrder' => isset($node['sort_order']) ? (int)$node['sort_order'] : 0,
+            'isActive' => (bool)$node['is_active'],
+            'createdAt' => $node['created_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin campaign node delete error: " . $e->getMessage());
+        jsonResponse(['message' => 'Error deleting campaign node'], 500);
+    }
 }
 
 // GET /api/admin/admins - List all admin users

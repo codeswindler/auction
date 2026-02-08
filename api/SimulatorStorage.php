@@ -7,8 +7,10 @@
 class SimulatorStorage {
     private $sessions = []; // In-memory session storage
     private $mockUser = null;
+    private $pdo = null;
     
     public function __construct($pdo = null) {
+        $this->pdo = $pdo;
         // Create a mock user for simulator
         $this->mockUser = [
             'id' => 999999,
@@ -116,6 +118,50 @@ class SimulatorStorage {
     }
     
     public function getFeeTransactions($parentTransactionId) {
+        return [];
+    }
+
+    public function getActiveCampaign() {
+        if ($this->pdo) {
+            $stmt = $this->pdo->prepare("SELECT * FROM campaigns WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
+            $stmt->execute();
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+
+        return [
+            'id' => 1,
+            'name' => 'Demo Campaign',
+            'menu_title' => 'Demo Menu',
+            'root_prompt' => 'Welcome to the demo menu.',
+            'bid_fee_min' => 30,
+            'bid_fee_max' => 99,
+            'bid_fee_prompt' => 'Please complete the bid on MPesa, ref: {{ref}}.',
+            'is_active' => 1,
+            'created_at' => date('Y-m-d H:i:s')
+        ];
+    }
+
+    public function listCampaignNodes($campaignId, $includeInactive = false) {
+        if ($this->pdo) {
+            if ($includeInactive) {
+                $stmt = $this->pdo->prepare("
+                    SELECT * FROM campaign_nodes
+                    WHERE campaign_id = ?
+                    ORDER BY sort_order ASC, id ASC
+                ");
+                $stmt->execute([$campaignId]);
+                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            $stmt = $this->pdo->prepare("
+                SELECT * FROM campaign_nodes
+                WHERE campaign_id = ? AND is_active = 1
+                ORDER BY sort_order ASC, id ASC
+            ");
+            $stmt->execute([$campaignId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
         return [];
     }
     
