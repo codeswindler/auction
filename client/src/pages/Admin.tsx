@@ -576,6 +576,30 @@ export default function Admin() {
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeAllTransactions = Array.isArray(allTransactions) ? allTransactions : []; // All transactions for analytics
 
+  // Fetch full filtered transactions for export/count (no client-side limiting)
+  const { data: exportTransactions = [], isLoading: exportLoading } = useQuery({
+    queryKey: [api.admin.transactions.list.path, "export", typeFilter, statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo],
+    queryFn: async () => {
+      try {
+        const queryString = buildQueryString();
+        const transactionsUrl = `${api.admin.transactions.list.path}${queryString ? `?${queryString}` : ""}`;
+        const response = await fetch(transactionsUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("[Admin] Error fetching export transactions:", error);
+        return [];
+      }
+    },
+    staleTime: 30000,
+    gcTime: 300000,
+  });
+
+  const exportCount = Array.isArray(exportTransactions) ? exportTransactions.length : 0;
+
   // Helper function to get display name for a transaction
   // For old data without paymentName, show blank instead of trying to derive it
   const getDisplayName = (tx: any) => {
@@ -843,13 +867,13 @@ export default function Admin() {
 
   // Export to Excel function
   const exportToExcel = () => {
-    if (safeTransactions.length === 0) {
+    if (exportCount === 0) {
       alert("No transactions to export");
       return;
     }
 
     // Prepare data for Excel
-    const excelData = safeTransactions.map((tx: any) => {
+    const excelData = exportTransactions.map((tx: any) => {
       if (!tx) return null;
       return {
       "ID": tx.id,
@@ -862,6 +886,7 @@ export default function Admin() {
                 tx.paymentStatus === 'failed' ? 'Failed' :
                 tx.status === 'completed' ? 'Completed' : 'Pending',
       "M-Pesa Receipt": tx.mpesaReceipt || "-",
+      "Failure Reason": tx.paymentFailureReason || "-",
       "Payment Date": tx.paymentDate ? new Date(tx.paymentDate).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" }) : "-",
       "Is Fee": tx.isFee ? "Yes" : "No",
       "Created At": tx.createdAt ? new Date(tx.createdAt).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" }) : "-",
@@ -1034,6 +1059,17 @@ export default function Admin() {
               <h2 className="text-2xl font-bold text-foreground">Transactions</h2>
               <div className="flex items-center gap-2">
               {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={exportLoading}
+                  onClick={exportToExcel}
+                >
+                  {exportLoading ? "Loading..." : `Current Report: ${exportCount}`}
+                </Button>
+              )}
+              {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2">
                   <X className="w-4 h-4" />
                   Clear Filters
@@ -1041,7 +1077,7 @@ export default function Admin() {
               )}
                 <Button variant="default" size="sm" onClick={exportToExcel} className="gap-2">
                   <Download className="w-4 h-4" />
-                  Export to Excel
+                  Export Current
                 </Button>
               </div>
             </div>
@@ -1049,7 +1085,15 @@ export default function Admin() {
             {/* Filters */}
             <Card className="p-4">
               <div className="flex items-center gap-2 mb-4">
-                <Filter className="w-4 h-4 text-muted-foreground" />
+                <button
+                  type="button"
+                  onClick={hasActiveFilters ? clearFilters : undefined}
+                  className={hasActiveFilters ? "cursor-pointer" : "cursor-default"}
+                  aria-label="Clear filters"
+                  title={hasActiveFilters ? "Clear filters" : "Filters"}
+                >
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                </button>
                 <span className="text-sm font-medium text-foreground">Filters</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
