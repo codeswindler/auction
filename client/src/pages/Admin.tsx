@@ -16,9 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowUp, ArrowDown, Moon, Sun, Users as UsersIcon, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { GalaxyBackground } from "@/components/GalaxyBackground";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Admin() {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   
   // Debug: Log component mount
   useEffect(() => {
@@ -420,23 +422,23 @@ export default function Admin() {
     const bidFeeMin = Number(campaignForm.bidFeeMin);
     const bidFeeMax = Number(campaignForm.bidFeeMax);
     if (!name || !menuTitle || !rootPrompt) {
-      alert("Name, menu title, and root prompt are required.");
+      toast({ title: "Missing fields", description: "Name, menu title, and root prompt are required.", variant: "destructive" });
       return;
     }
     if (!Number.isFinite(bidFeeMin) || bidFeeMin < 0) {
-      alert("Bid fee minimum must be a valid number (0 or more).");
+      toast({ title: "Invalid value", description: "Bid fee minimum must be a valid number (0 or more).", variant: "destructive" });
       return;
     }
     if (!Number.isFinite(bidFeeMax) || bidFeeMax < 0) {
-      alert("Bid fee maximum must be a valid number (0 or more).");
+      toast({ title: "Invalid value", description: "Bid fee maximum must be a valid number (0 or more).", variant: "destructive" });
       return;
     }
     if (bidFeeMin > bidFeeMax) {
-      alert("Bid fee minimum cannot be greater than maximum.");
+      toast({ title: "Invalid range", description: "Bid fee minimum cannot be greater than maximum.", variant: "destructive" });
       return;
     }
     if (!bidFeePrompt) {
-      alert("Bid fee prompt message is required.");
+      toast({ title: "Missing fields", description: "Bid fee prompt message is required.", variant: "destructive" });
       return;
     }
 
@@ -464,7 +466,7 @@ export default function Admin() {
       }
       resetCampaignForm();
     } catch (error: any) {
-      alert(error.message || "Failed to save campaign");
+      toast({ title: "Save failed", description: error.message || "Failed to save campaign", variant: "destructive" });
     }
   };
 
@@ -482,19 +484,19 @@ export default function Admin() {
   const handleNodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCampaign?.id) {
-      alert("No campaign selected.");
+      toast({ title: "Missing selection", description: "No campaign selected.", variant: "destructive" });
       return;
     }
     const label = nodeForm.label.trim();
     if (!label) {
-      alert("Node label is required.");
+      toast({ title: "Missing fields", description: "Node label is required.", variant: "destructive" });
       return;
     }
     let actionPayload = "";
     if (nodeForm.actionType === "bid") {
       const amount = Number(nodeForm.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        alert("Enter a valid amount for bid nodes.");
+        toast({ title: "Invalid amount", description: "Enter a valid amount for bid nodes.", variant: "destructive" });
         return;
       }
       actionPayload = JSON.stringify({ amount });
@@ -527,7 +529,7 @@ export default function Admin() {
       }
       resetNodeForm(nodeForm.parentId);
     } catch (error: any) {
-      alert(error.message || "Failed to save node");
+      toast({ title: "Save failed", description: error.message || "Failed to save node", variant: "destructive" });
     }
   };
 
@@ -868,7 +870,7 @@ export default function Admin() {
   // Export to Excel function
   const exportToExcel = () => {
     if (exportCount === 0) {
-      alert("No transactions to export");
+      toast({ title: "No data", description: "No transactions to export", variant: "destructive" });
       return;
     }
 
@@ -912,11 +914,11 @@ export default function Admin() {
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdminUsername || !newAdminPassword) {
-      alert("Username and password are required");
+      toast({ title: "Missing fields", description: "Username and password are required", variant: "destructive" });
       return;
     }
     if (newAdminPassword.length < 8) {
-      alert("Password must be at least 8 characters");
+      toast({ title: "Invalid password", description: "Password must be at least 8 characters", variant: "destructive" });
       return;
     }
     // Ask for super admin password as final step
@@ -933,9 +935,9 @@ export default function Admin() {
       });
       setNewAdminUsername("");
       setNewAdminPassword("");
-      alert("Admin user created successfully!");
+      toast({ title: "Admin created", description: "Admin user created successfully!" });
     } catch (error: any) {
-      alert(error.message || "Failed to create admin user");
+      toast({ title: "Create failed", description: error.message || "Failed to create admin user", variant: "destructive" });
     }
   };
 
@@ -1577,22 +1579,22 @@ export default function Admin() {
                         onClick={() => {
                           // Validate
                           if (!newAdminForm.username || !newAdminForm.password || !newAdminForm.confirmPassword || !newAdminForm.superAdminPassword) {
-                            alert("All fields are required");
+                            toast({ title: "Missing fields", description: "All fields are required", variant: "destructive" });
                             return;
                           }
                           
                           if (!/^[a-zA-Z0-9_-]{3,50}$/.test(newAdminForm.username)) {
-                            alert("Username must be 3-50 characters and contain only letters, numbers, underscores, and dashes");
+                            toast({ title: "Invalid username", description: "Username must be 3-50 characters and contain only letters, numbers, underscores, and dashes", variant: "destructive" });
                             return;
                           }
                           
                           if (newAdminForm.password.length < 8) {
-                            alert("Password must be at least 8 characters");
+                            toast({ title: "Invalid password", description: "Password must be at least 8 characters", variant: "destructive" });
                             return;
                           }
                           
                           if (newAdminForm.password !== newAdminForm.confirmPassword) {
-                            alert("Passwords do not match");
+                            toast({ title: "Password mismatch", description: "Passwords do not match", variant: "destructive" });
                             return;
                           }
                           
@@ -1678,10 +1680,10 @@ export default function Admin() {
                                       queryClient.invalidateQueries({ queryKey: ["/api/admin/admins"] });
                                     } else {
                                       const error = await response.json();
-                                      alert(error.error || "Failed to deactivate admin");
+                                      toast({ title: "Deactivate failed", description: error.error || "Failed to deactivate admin", variant: "destructive" });
                                     }
                                   } catch (error) {
-                                    alert("Error deactivating admin");
+                                    toast({ title: "Deactivate failed", description: "Error deactivating admin", variant: "destructive" });
                                   }
                                 }}
                                 className="text-destructive hover:text-destructive"
