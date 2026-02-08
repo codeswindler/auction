@@ -14,8 +14,12 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/SimulatorStorage.php';
 require_once __DIR__ . '/ussd_handler.php';
 
-// Require admin authentication (disabled in development)
-requireAdminAuth();
+// Require admin authentication only if explicitly enabled
+$requireSimulatorAuth = getenv('SIMULATOR_REQUIRE_AUTH');
+$requireSimulatorAuth = $requireSimulatorAuth === 'true' || $requireSimulatorAuth === '1';
+if ($requireSimulatorAuth) {
+    requireAdminAuth();
+}
 
 // Clear opcache to ensure latest code is used (for simulator only)
 if (function_exists('opcache_reset')) {
@@ -40,7 +44,7 @@ try {
     }
     
     // Use SimulatorStorage instead of real Storage - no database writes
-    $simulatorStorage = new SimulatorStorage();
+    $simulatorStorage = new SimulatorStorage($pdo);
     
     // Debug: Log what the simulator is sending
     error_log("[SIMULATOR] Phone: $phoneNumber | SessionID: $sessionId | Text: $text");
