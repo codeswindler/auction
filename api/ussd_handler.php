@@ -24,11 +24,12 @@ function parseUSSDInput($input) {
 
     $startsWithStar = strpos($input, '*') === 0;
     $endsWithHash = substr($input, -1) === '#';
+    $gatewaySuffixes = ['65', '63'];
 
-    if (count($parts) > 0 && $parts[0] === '65') {
-        // INPUT starts with gateway suffix (65), user input starts at index 1
+    if (count($parts) > 0 && in_array($parts[0], $gatewaySuffixes, true)) {
+        // INPUT starts with gateway suffix (e.g. 63 or 65), user input starts at index 1
         $userParts = count($parts) > 1 ? array_slice($parts, 1) : [];
-    } elseif (count($parts) > 1 && $parts[1] === '65') {
+    } elseif (count($parts) > 1 && in_array($parts[1], $gatewaySuffixes, true)) {
         // Legacy format: "*519*65#" or "*519*65*1*25000#"
         // Gateway code is first 2 parts (519*65), user input starts at index 2
         $userParts = count($parts) > 2 ? array_slice($parts, 2) : [];
