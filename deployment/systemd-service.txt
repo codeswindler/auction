@@ -1,0 +1,31 @@
+# Systemd Service for Jenga Capital USSD App
+# Create file: /etc/systemd/system/jengacapital.service
+
+[Unit]
+Description=Jenga Capital USSD Application
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/ussd
+EnvironmentFile=/var/www/ussd/.env.production
+ExecStart=/usr/bin/node /var/www/ussd/server/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Timeout for long USSD sessions
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+# Usage after creating file:
+# sudo systemctl daemon-reload
+# sudo systemctl start jengacapital
+# sudo systemctl enable jengacapital
+# sudo systemctl status jengacapital
+# sudo journalctl -u jengacapital -f  (to view logs)

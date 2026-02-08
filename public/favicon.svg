@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background circle -->
+  <defs>
+    <linearGradient id="bankGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bankGradient)"/>
+
+  <!-- Stylized bank / vault icon -->
+  <g fill="none" stroke="#F9FAFB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Pillar outlines -->
+    <path d="M18 44 V26" />
+    <path d="M28 44 V26" />
+    <path d="M38 44 V26" />
+    <path d="M46 44 V26" />
+
+    <!-- Base -->
+    <path d="M15 44 H49" />
+
+    <!-- Roof -->
+    <path d="M15 24 L32 16 L49 24 Z" />
+  </g>
+
+  <!-- Small coin / spark accent -->
+  <circle cx="32" cy="30" r="3" fill="#FACC15"/>
+</svg>
+
+
