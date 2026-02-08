@@ -21,16 +21,29 @@ function parseUSSDInput($input) {
     // Remove leading * and trailing # if present
     $cleaned = preg_replace('/^\*/', '', preg_replace('/#$/', '', $input));
     $parts = explode('*', $cleaned);
-    
-    // If INPUT starts with gateway suffix (65), skip it and get user selections
-    // Gateway suffix is always the first part, user input starts at index 1
+
+    $startsWithStar = strpos($input, '*') === 0;
+    $endsWithHash = substr($input, -1) === '#';
+
     if (count($parts) > 0 && $parts[0] === '65') {
-        // Skip the gateway suffix (65), get user selections
+        // INPUT starts with gateway suffix (65), user input starts at index 1
         $userParts = count($parts) > 1 ? array_slice($parts, 1) : [];
-    } else {
+    } elseif (count($parts) > 1 && $parts[1] === '65') {
         // Legacy format: "*519*65#" or "*519*65*1*25000#"
         // Gateway code is first 2 parts (519*65), user input starts at index 2
         $userParts = count($parts) > 2 ? array_slice($parts, 2) : [];
+    } elseif (count($parts) > 1 && $startsWithStar) {
+        // Shortcode format: "*123*1#" -> treat first part as service code
+        $userParts = array_slice($parts, 1);
+    } elseif (count($parts) === 1) {
+        // Dial only: "*123#" -> no selections yet
+        if ($startsWithStar && $endsWithHash) {
+            $userParts = [];
+        } else {
+            $userParts = [$parts[0]];
+        }
+    } else {
+        $userParts = [];
     }
     
     $lastInput = count($userParts) > 0 ? $userParts[count($userParts) - 1] : '';
