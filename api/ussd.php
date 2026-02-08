@@ -26,6 +26,20 @@ try {
         error_log("[USSD ERROR] Missing required parameters - MSISDN: " . ($msisdn ?: 'empty') . ", SESSIONID: " . ($sessionId ?: 'empty') . ", USSDCODE: " . ($ussdCode ?: 'empty'));
         textResponse("END Invalid request parameters.");
     }
+
+    // Debounce duplicate gateway retries for the same session/input within a short window.
+    $debounceSeconds = 5;
+    $cacheKey = hash('sha256', $sessionId . '|' . $input . '|' . $ussdCode);
+    $cacheFile = sys_get_temp_dir() . "/ussd_cache_{$cacheKey}.txt";
+    if (file_exists($cacheFile)) {
+        $age = time() - filemtime($cacheFile);
+        if ($age >= 0 && $age <= $debounceSeconds) {
+            $cachedResponse = @file_get_contents($cacheFile);
+            if ($cachedResponse !== false && $cachedResponse !== '') {
+                textResponse($cachedResponse);
+            }
+        }
+    }
     
     $response = handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage);
     
@@ -47,6 +61,9 @@ try {
     );
     
     error_log($logEntry);
+
+    // Cache response for quick replay on gateway retries.
+    @file_put_contents($cacheFile, $response);
     
     textResponse($response);
     
