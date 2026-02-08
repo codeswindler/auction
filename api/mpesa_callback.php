@@ -326,6 +326,9 @@ try {
                 'payment_status' => 'failed',
                 'mpesa_transaction_id' => $merchantRequestID ?: $checkoutRequestID, // Store for reference
             ]);
+            // Reflect failure in transaction status for reporting
+            $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
+            $stmt->execute([$transaction['id']]);
             
             error_log("Transaction {$transaction['id']} marked as failed: {$resultDesc} (ResultCode: {$resultCode}, MerchantRequestID: {$merchantRequestID})");
             
@@ -360,6 +363,8 @@ try {
                     'payment_status' => 'failed',
                     'mpesa_transaction_id' => $merchantRequestID ?: $checkoutRequestID,
                 ]);
+                $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
+                $stmt->execute([$transaction['id']]);
                 error_log("Transaction {$transaction['id']} marked as failed: {$resultDesc} (ResultCode: {$resultCode})");
                 
                 // If user cancelled the STK push (ResultCode 1032), send USSD Push notification
