@@ -28,7 +28,7 @@ try {
     }
 
     // Debounce duplicate gateway retries for the same session/input within a short window.
-    $debounceSeconds = 5;
+    $debounceSeconds = 10;
     $cacheKey = hash('sha256', $sessionId . '|' . $input . '|' . $ussdCode);
     $cacheFile = sys_get_temp_dir() . "/ussd_cache_{$cacheKey}.txt";
     if (file_exists($cacheFile)) {
