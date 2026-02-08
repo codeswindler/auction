@@ -25,10 +25,15 @@ ADD COLUMN IF NOT EXISTS payment_date TIMESTAMP DEFAULT NULL;
 ALTER TABLE transactions 
 ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'pending';
 
+-- Add payment failure reason (for failed/cancelled payments)
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS payment_failure_reason VARCHAR(255) DEFAULT NULL;
+
 -- Add indexes for faster queries
 CREATE INDEX IF NOT EXISTS idx_transactions_payment_status ON transactions(payment_status);
 CREATE INDEX IF NOT EXISTS idx_transactions_payment_method ON transactions(payment_method);
 CREATE INDEX IF NOT EXISTS idx_transactions_mpesa_receipt ON transactions(mpesa_receipt);
+CREATE INDEX IF NOT EXISTS idx_transactions_payment_failure_reason ON transactions(payment_failure_reason);
 
 -- Update existing transactions to have payment_status = status
 UPDATE transactions SET payment_status = status WHERE payment_status IS NULL;

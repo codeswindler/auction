@@ -93,6 +93,7 @@ ADD COLUMN IF NOT EXISTS payment_date TIMESTAMP DEFAULT NULL;
 
 ALTER TABLE transactions 
 ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'pending';
+ADD COLUMN IF NOT EXISTS payment_failure_reason VARCHAR(255) DEFAULT NULL;
 
 ALTER TABLE transactions 
 ADD COLUMN IF NOT EXISTS payment_name VARCHAR(255) DEFAULT NULL;
@@ -110,6 +111,7 @@ FOREIGN KEY (parent_transaction_id) REFERENCES transactions(id) ON DELETE SET NU
 CREATE INDEX IF NOT EXISTS idx_transactions_parent ON transactions(parent_transaction_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_is_fee ON transactions(is_fee);
 CREATE INDEX IF NOT EXISTS idx_transactions_payment_status ON transactions(payment_status);
+CREATE INDEX IF NOT EXISTS idx_transactions_payment_failure_reason ON transactions(payment_failure_reason);
 CREATE INDEX IF NOT EXISTS idx_transactions_payment_method ON transactions(payment_method);
 CREATE INDEX IF NOT EXISTS idx_transactions_mpesa_receipt ON transactions(mpesa_receipt);
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant_request_id ON transactions(merchant_request_id);

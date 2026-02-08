@@ -325,6 +325,7 @@ try {
             $storage->updateTransactionPayment($transaction['id'], [
                 'payment_status' => 'failed',
                 'mpesa_transaction_id' => $merchantRequestID ?: $checkoutRequestID, // Store for reference
+                'payment_failure_reason' => $resultDesc,
             ]);
             // Reflect failure in transaction status for reporting
             $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
@@ -362,6 +363,7 @@ try {
                 $storage->updateTransactionPayment($transaction['id'], [
                     'payment_status' => 'failed',
                     'mpesa_transaction_id' => $merchantRequestID ?: $checkoutRequestID,
+                    'payment_failure_reason' => $resultDesc,
                 ]);
                 $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
                 $stmt->execute([$transaction['id']]);

@@ -92,6 +92,7 @@ if ($method === 'GET' && preg_match('#/api/admin/transactions#', $path)) {
                 'paymentPhone' => $t['payment_phone'] ?? null,
                 'paymentName' => $t['payment_name'] ?? null,
                 'paymentStatus' => $t['payment_status'] ?? $t['status'],
+                'paymentFailureReason' => $t['payment_failure_reason'] ?? null,
                 'paymentDate' => $t['payment_date'] ?? null,
                 'isFee' => (bool)($t['is_fee'] ?? false),
                 'parentTransactionId' => $t['parent_transaction_id'] ? (int)$t['parent_transaction_id'] : null,

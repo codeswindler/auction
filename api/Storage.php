@@ -485,6 +485,11 @@ class Storage {
             $fields[] = "payment_name = ?";
             $params[] = $paymentData['payment_name'];
         }
+
+        if (isset($paymentData['payment_failure_reason'])) {
+            $fields[] = "payment_failure_reason = ?";
+            $params[] = $paymentData['payment_failure_reason'];
+        }
         
         if (empty($fields)) {
             return false;

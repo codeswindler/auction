@@ -47,7 +47,10 @@ $shortcode = getenv('MPESA_SHORTCODE');
 $callbackUrl = getenv('MPESA_CALLBACK_URL') ?: 'https://jengacapital.co.ke/api/mpesa/callback';
 
 if (!$consumerKey || !$consumerSecret || !$passkey || !$shortcode) {
-    $storage->updateTransactionPayment($transactionId, ['payment_status' => 'failed']);
+    $storage->updateTransactionPayment($transactionId, [
+        'payment_status' => 'failed',
+        'payment_failure_reason' => 'M-Pesa credentials not configured',
+    ]);
     $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
     $stmt->execute([$transactionId]);
     stkUserError('Payment service is not configured. Please try again later.');
@@ -84,7 +87,10 @@ curl_close($ch);
 
 if ($httpCode !== 200) {
     error_log("M-Pesa Access Token Error: HTTP $httpCode - $response");
-    $storage->updateTransactionPayment($transactionId, ['payment_status' => 'failed']);
+    $storage->updateTransactionPayment($transactionId, [
+        'payment_status' => 'failed',
+        'payment_failure_reason' => 'Failed to get M-Pesa access token',
+    ]);
     $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
     $stmt->execute([$transactionId]);
     stkUserError('Unable to initiate payment right now. Please try again later.', 500, [
@@ -98,7 +104,10 @@ $accessToken = $tokenData['access_token'] ?? null;
 
 if (!$accessToken) {
     error_log("M-Pesa Access Token Error: Invalid response - $response");
-    $storage->updateTransactionPayment($transactionId, ['payment_status' => 'failed']);
+    $storage->updateTransactionPayment($transactionId, [
+        'payment_status' => 'failed',
+        'payment_failure_reason' => 'Invalid M-Pesa access token response',
+    ]);
     $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
     $stmt->execute([$transactionId]);
     stkUserError('Unable to initiate payment right now. Please try again later.', 500, [
@@ -178,7 +187,10 @@ if ($stkHttpCode === 200 && isset($stkData['ResponseCode']) && $stkData['Respons
     ]);
 } else {
     error_log("STK Push Error: HTTP $stkHttpCode - $stkResponse");
-    $storage->updateTransactionPayment($transactionId, ['payment_status' => 'failed']);
+    $storage->updateTransactionPayment($transactionId, [
+        'payment_status' => 'failed',
+        'payment_failure_reason' => $stkData['ResponseDescription'] ?? 'STK push failed',
+    ]);
     $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
     $stmt->execute([$transactionId]);
     stkUserError('We could not initiate the M-Pesa prompt. Please try again shortly.', 500, [
