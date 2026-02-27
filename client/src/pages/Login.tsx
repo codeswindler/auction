@@ -142,7 +142,7 @@ export default function Login() {
               {/* USSD Simulator Option */}
               <button
                 onClick={() => setLocation("/simulator")}
-                className="p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group bg-card"
+                className="p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group bg-card cursor-pointer"
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -160,7 +160,7 @@ export default function Login() {
               {/* Admin Dashboard Option */}
               <button
                 onClick={() => setLocation("/admin")}
-                className="p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group bg-card"
+                className="p-6 rounded-lg border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-left group bg-card cursor-pointer"
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
