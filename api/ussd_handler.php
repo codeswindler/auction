@@ -24,7 +24,7 @@ function parseUSSDInput($input) {
 
     $startsWithStar = strpos($input, '*') === 0;
     $endsWithHash = substr($input, -1) === '#';
-    $gatewaySuffixes = ['65', '63'];
+    $gatewaySuffixes = ['65', '63', '22'];
 
     if (count($parts) > 0 && in_array($parts[0], $gatewaySuffixes, true)) {
         // INPUT starts with gateway suffix (e.g. 63 or 65), user input starts at index 1
@@ -127,17 +127,19 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     
     // Fix: If INPUT is just a plain number (like "22" from *855*22#) and this is the first interaction
     // (empty input_history), treat it as the initial dial to show the root menu
+    // BUT: If INPUT contains * (like "22*3"), it's a selection, so parse it normally
     $isPlainNumber = preg_match('/^[0-9]+$/', $input) === 1 && strpos($input, '*') === false && strpos($input, '#') === false;
     $isFirstInteraction = empty($session['input_history']) || $session['input_history'] === '';
     
     if ($isFirstInteraction && $isPlainNumber) {
-        // This is the first dial with a plain number - ignore it and show root menu
+        // This is the first dial with a plain number (no selections) - ignore it and show root menu
         error_log("[USSD FIX] First dial detected with plain number input: '$input' - treating as initial dial (empty input_history)");
         $parsed = ['parts' => [], 'lastInput' => ''];
         $parts = [];
         $lastInput = '';
         $level = 0;
     } else {
+        // Normal parsing - includes selections like "22*3" or "3"
         $parsed = parseUSSDInput($input);
         $parts = $parsed['parts'];
         $lastInput = $parsed['lastInput'];
@@ -267,10 +269,14 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     $prompt = $currentNode['prompt'] ?? $activeCampaign['root_prompt'];
     $menuBody = $buildMenu($prompt, $children);
 
+    // Debug logging
+    error_log("[USSD DEBUG] Current node: ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}, ChildrenCount=" . count($children));
+
     if (count($children) > 0) {
         $storage->updateSession($sessionId, 'campaign_menu:' . $activeCampaign['id'] . ':' . ($currentParentId ?? 'root'), $input);
         $response = "CON " . $menuBody;
     } else if (($currentNode['action_type'] ?? null) === 'bid') {
+        error_log("[USSD DEBUG] Bid action detected for node: {$currentNode['label']}");
         $payload = [];
         if (!empty($currentNode['action_payload'])) {
             $decoded = json_decode($currentNode['action_payload'], true);
