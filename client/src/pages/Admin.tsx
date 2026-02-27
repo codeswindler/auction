@@ -75,8 +75,8 @@ export default function Admin() {
   
   // Filter state
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("paid"); // Default to paid
-  const [feeFilter, setFeeFilter] = useState<string>("fees_only"); // Default to fees only
+  const [statusFilter, setStatusFilter] = useState<string>("all"); // Default to all statuses
+  const [feeFilter, setFeeFilter] = useState<string>("all"); // Default to all transactions
   const [sourceFilter, setSourceFilter] = useState<string>("all"); // all, ussd, web
   const [phoneNumberFilter, setPhoneNumberFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("");
