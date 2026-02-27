@@ -66,8 +66,8 @@ if ($method === 'GET' && preg_match('#/api/admin/transactions#', $path)) {
         // Get filter parameters from query string
         $typeFilter = isset($_GET['type']) && $_GET['type'] !== 'all' ? $_GET['type'] : null;
         $statusFilter = isset($_GET['status']) && $_GET['status'] !== 'all' ? $_GET['status'] : null;
-        // Default to showing all transactions (user can filter to fees only if needed)
-        $isFeeFilter = isset($_GET['is_fee']) ? $_GET['is_fee'] : null; // Default to all transactions
+        // Default to showing only fees (bid fees)
+        $isFeeFilter = isset($_GET['is_fee']) ? $_GET['is_fee'] : 'true'; // Default to fees only
         $sourceFilter = isset($_GET['source']) && $_GET['source'] !== 'all' ? $_GET['source'] : null;
         $phoneNumberFilter = isset($_GET['phone_number']) && $_GET['phone_number'] !== '' ? $_GET['phone_number'] : null;
         $dateFrom = isset($_GET['date_from']) && $_GET['date_from'] !== '' ? $_GET['date_from'] : null;
