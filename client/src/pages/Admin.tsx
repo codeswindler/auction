@@ -603,18 +603,18 @@ export default function Admin() {
   const exportCount = Array.isArray(exportTransactions) ? exportTransactions.length : 0;
 
   // Helper function to get display name for a transaction
-  // For old data without paymentName, show blank instead of trying to derive it
+  // Get bid selection name - for fees, backend returns parent's payment_name, for bids use own payment_name
   const getDisplayName = (tx: any) => {
     try {
-      // If paymentName exists (from M-Pesa), use it
+      // If paymentName exists, use it (backend already includes parent's payment_name for fees)
       if (tx?.paymentName && tx.paymentName.trim() !== '') {
         return tx.paymentName;
       }
-      // For old data without paymentName, show blank/N/A
-      return 'N/A';
+      // For old data without paymentName, show blank instead of N/A
+      return '';
     } catch (error) {
       console.error('Error getting display name:', error);
-      return 'N/A';
+      return '';
     }
   };
 
