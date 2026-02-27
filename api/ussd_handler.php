@@ -119,24 +119,24 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     
     // Get or create session
     $session = $storage->getOrCreateSession($sessionId, $msisdn, $ussdCode);
-    $parsed = parseUSSDInput($input);
-    $parts = $parsed['parts'];
-    $lastInput = $parsed['lastInput'];
-    $level = count($parts);
     
-    // Fix: If this is the first dial and INPUT is just a plain number (like "22" from *855*22#),
-    // treat it as the initial dial (empty parts) to show the root menu
-    $isFirstDial = empty($session['current_menu']) || $session['current_menu'] === 'main' || 
-                   (strpos($session['current_menu'] ?? '', 'campaign_menu:') === false && 
-                    strpos($session['current_menu'] ?? '', 'campaign_menu_invalid') === false);
+    // Fix: If INPUT is just a plain number (like "22" from *855*22#) and this is the first interaction
+    // (empty input_history), treat it as the initial dial to show the root menu
     $isPlainNumber = preg_match('/^[0-9]+$/', $input) === 1 && strpos($input, '*') === false && strpos($input, '#') === false;
+    $isFirstInteraction = empty($session['input_history']) || $session['input_history'] === '';
     
-    if ($isFirstDial && $isPlainNumber && count($parts) > 0) {
+    if ($isFirstInteraction && $isPlainNumber) {
         // This is the first dial with a plain number - ignore it and show root menu
-        error_log("[USSD FIX] First dial detected with plain number input: '$input' - treating as initial dial");
+        error_log("[USSD FIX] First dial detected with plain number input: '$input' - treating as initial dial (empty input_history)");
+        $parsed = ['parts' => [], 'lastInput' => ''];
         $parts = [];
         $lastInput = '';
         $level = 0;
+    } else {
+        $parsed = parseUSSDInput($input);
+        $parts = $parsed['parts'];
+        $lastInput = $parsed['lastInput'];
+        $level = count($parts);
     }
 
     // Log USSD session step details with full debugging info
