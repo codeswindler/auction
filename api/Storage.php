@@ -361,9 +361,10 @@ class Storage {
     }
     
     public function getAllTransactions($typeFilter = null, $statusFilter = null, $paymentStatusFilter = null, $paymentMethodFilter = null, $dateFrom = null, $dateTo = null, $limit = null, $isFeeFilter = null, $sourceFilter = null, $phoneNumberFilter = null) {
-        $query = "SELECT t.*, u.phone_number 
+        $query = "SELECT t.*, u.phone_number, pt.payment_name as parent_payment_name
                   FROM transactions t 
                   LEFT JOIN users u ON t.user_id = u.id 
+                  LEFT JOIN transactions pt ON t.parent_transaction_id = pt.id
                   WHERE 1=1";
         $params = [];
         

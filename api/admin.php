@@ -79,6 +79,11 @@ if ($method === 'GET' && preg_match('#/api/admin/transactions#', $path)) {
         
         $transactions = $storage->getAllTransactions($typeFilter, $statusFilter, null, null, $dateFrom, $dateTo, $limit, $isFeeFilter, $sourceFilter, $phoneNumberFilter);
         $result = array_map(function($t) {
+            // For fee transactions, use parent's payment_name (bid selection), otherwise use own payment_name
+            $bidSelected = ($t['is_fee'] ?? false) && !empty($t['parent_payment_name']) 
+                ? $t['parent_payment_name'] 
+                : ($t['payment_name'] ?? null);
+            
             return [
                 'id' => (int)$t['id'],
                 'userId' => (int)$t['user_id'],
@@ -91,7 +96,7 @@ if ($method === 'GET' && preg_match('#/api/admin/transactions#', $path)) {
                 'mpesaReceipt' => $t['mpesa_receipt'] ?? null,
                 'mpesaTransactionId' => $t['mpesa_transaction_id'] ?? null,
                 'paymentPhone' => $t['payment_phone'] ?? null,
-                'paymentName' => $t['payment_name'] ?? null,
+                'paymentName' => $bidSelected, // Use parent's payment_name for fees, own for bids
                 'paymentStatus' => $t['payment_status'] ?? $t['status'],
                 'paymentFailureReason' => $t['payment_failure_reason'] ?? null,
                 'paymentDate' => $t['payment_date'] ?? null,

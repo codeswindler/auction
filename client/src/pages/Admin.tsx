@@ -74,7 +74,7 @@ export default function Admin() {
   const queryClient = useQueryClient();
   
   // Filter state
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  // Type filter removed - only showing bid fees
   const [statusFilter, setStatusFilter] = useState<string>("all"); // Default to all statuses
   const [feeFilter, setFeeFilter] = useState<string>("fees_only"); // Default to fees only
   const [sourceFilter, setSourceFilter] = useState<string>("all"); // all, ussd, web
@@ -87,7 +87,7 @@ export default function Admin() {
   // Build query string for filters
   const buildQueryString = () => {
     const params = new URLSearchParams();
-    if (typeFilter !== "all") params.set("type", typeFilter);
+    // Type filter removed
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (feeFilter === "fees_only") params.set("is_fee", "true");
     if (feeFilter === "exclude_fees") params.set("is_fee", "false");
@@ -547,7 +547,7 @@ export default function Admin() {
 
   // Fetch filtered transactions for table display (with pagination limit)
   const { data: transactions = [], isLoading: txLoading, error: txError } = useQuery({
-    queryKey: [api.admin.transactions.list.path, typeFilter, statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo, page],
+    queryKey: [api.admin.transactions.list.path, statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo, page],
     queryFn: async () => {
       try {
       const queryString = buildQueryString();
@@ -580,7 +580,7 @@ export default function Admin() {
 
   // Fetch full filtered transactions for export/count (no client-side limiting)
   const { data: exportTransactions = [], isLoading: exportLoading } = useQuery({
-    queryKey: [api.admin.transactions.list.path, "export", typeFilter, statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo],
+    queryKey: [api.admin.transactions.list.path, "export", statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo],
     queryFn: async () => {
       try {
         const queryString = buildQueryString();
@@ -856,7 +856,6 @@ export default function Admin() {
   const breakdownAllTime = calculateBreakdown(paidFees);
 
   const clearFilters = () => {
-    setTypeFilter("all");
     setStatusFilter("all");
     setFeeFilter("all");
     setSourceFilter("all");
@@ -865,7 +864,7 @@ export default function Admin() {
     setDateTo("");
   };
 
-  const hasActiveFilters = typeFilter !== "all" || statusFilter !== "all" || feeFilter !== "all" || sourceFilter !== "all" || phoneNumberFilter || dateFrom || dateTo;
+  const hasActiveFilters = statusFilter !== "all" || feeFilter !== "all" || sourceFilter !== "all" || phoneNumberFilter || dateFrom || dateTo;
 
   // Export to Excel function
   const exportToExcel = () => {
@@ -1112,21 +1111,6 @@ export default function Admin() {
                     />
                   </div>
               </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Type</label>
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="bid">Bid</SelectItem>
-                      <SelectItem value="bid_fee">Bid Fee</SelectItem>
-                      <SelectItem value="fee">Fee</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
