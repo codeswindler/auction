@@ -50,6 +50,12 @@ if (preg_match('#^/api/mpesa/callback$#', $path) && $requestMethod === 'POST') {
     exit;
 }
 
+// Also handle /payments/mpesa/callback (M-Pesa is configured to use this path)
+if (preg_match('#^/payments/mpesa/callback$#', $path) && $requestMethod === 'POST') {
+    require __DIR__ . '/mpesa_callback.php';
+    exit;
+}
+
 if (preg_match('#^/api/mpesa/c2b/callback$#', $path) && $requestMethod === 'POST') {
     require __DIR__ . '/mpesa_c2b_callback.php';
     exit;
