@@ -308,6 +308,11 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
             'status' => 'pending',
             'source' => 'ussd'
         ]);
+        
+        // Store bid selection (product label) in payment_name field for display
+        $bidLabel = $currentNode['label'] ?? 'Unknown';
+        $stmt = $pdo->prepare("UPDATE transactions SET payment_name = ? WHERE id = ?");
+        $stmt->execute([$bidLabel, $bidTransactionId]);
 
         $feeRef = $ref . '-FEE';
         $feeTransactionId = $storage->createFeeTransaction($user['id'], number_format($feeAmount, 2, '.', ''), $feeRef, $bidTransactionId, 'bid_fee', 'ussd');

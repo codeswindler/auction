@@ -75,8 +75,8 @@ export default function Admin() {
   
   // Filter state
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [feeFilter, setFeeFilter] = useState<string>("all"); // all, fees_only, exclude_fees
+  const [statusFilter, setStatusFilter] = useState<string>("paid"); // Default to paid
+  const [feeFilter, setFeeFilter] = useState<string>("fees_only"); // Default to fees only
   const [sourceFilter, setSourceFilter] = useState<string>("all"); // all, ussd, web
   const [phoneNumberFilter, setPhoneNumberFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -1200,7 +1200,7 @@ export default function Admin() {
                       <tr className="border-b border-border">
                         <th className="text-left py-3 px-4 font-semibold text-foreground">Type</th>
                         <th className="text-left py-3 px-4 font-semibold text-foreground">Phone Number</th>
-                        <th className="text-left py-3 px-4 font-semibold text-foreground">Name</th>
+                        <th className="text-left py-3 px-4 font-semibold text-foreground">Bid Selected</th>
                         <th className="text-right py-3 px-4 font-semibold text-foreground">Amount</th>
                         <th className="text-left py-3 px-4 font-semibold text-foreground">Reference</th>
                         <th className="text-left py-3 px-4 font-semibold text-foreground">Source</th>

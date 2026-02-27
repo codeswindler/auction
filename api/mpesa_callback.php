@@ -30,7 +30,9 @@ $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
 // Log the callback for debugging
-error_log("M-Pesa Callback from IP {$clientIp}: " . json_encode($data));
+error_log("=== M-PESA CALLBACK RECEIVED ===");
+error_log("M-Pesa Callback from IP {$clientIp}: " . json_encode($data, JSON_PRETTY_PRINT));
+error_log("Raw JSON: " . $json);
 
 try {
     // M-Pesa STK Push callback structure (adjust based on your M-Pesa API provider)
@@ -146,10 +148,12 @@ try {
         
         // Fallback: Find by phone number and amount (for backward compatibility)
         if (!$transaction && $phoneNumber && $amount) {
+            error_log("[CALLBACK DEBUG] Trying to find transaction by phone+amount: Phone={$phoneNumber}, Amount={$amount}");
             // Get user by phone
             $user = $storage->getUserByPhoneNumber($phoneNumber);
             
             if ($user) {
+                error_log("[CALLBACK DEBUG] User found: ID={$user['id']}");
                 // Find pending transaction for this user and amount (could be main transaction or fee)
                 // Prioritize fee transactions first, then main transactions
                 $stmt = $pdo->prepare("
@@ -162,10 +166,18 @@ try {
                 ");
                 $stmt->execute([$user['id'], $amount]);
                 $transaction = $stmt->fetch();
+                if ($transaction) {
+                    error_log("[CALLBACK DEBUG] Transaction found by phone+amount: ID={$transaction['id']}, Type={$transaction['type']}, IsFee={$transaction['is_fee']}");
+                } else {
+                    error_log("[CALLBACK DEBUG] No transaction found for user {$user['id']} with amount {$amount}");
+                }
+            } else {
+                error_log("[CALLBACK DEBUG] User not found for phone: {$phoneNumber}");
             }
         }
                 
                 if ($transaction) {
+                    error_log("[CALLBACK DEBUG] Updating transaction ID {$transaction['id']} with payment data");
                     // Update transaction with payment details
             $paymentData = [
                         'payment_method' => 'mpesa',
@@ -181,7 +193,9 @@ try {
                 $paymentData['payment_name'] = $customerName;
             }
             
-            $storage->updateTransactionPayment($transaction['id'], $paymentData);
+            error_log("[CALLBACK DEBUG] Payment data: " . json_encode($paymentData));
+            $updateResult = $storage->updateTransactionPayment($transaction['id'], $paymentData);
+            error_log("[CALLBACK DEBUG] Update result: " . ($updateResult ? 'Success' : 'Failed'));
                     
                     // Update transaction status to completed
                     $stmt = $pdo->prepare("UPDATE transactions SET status = 'completed' WHERE id = ?");
@@ -241,6 +255,7 @@ try {
             
             // Send Onfon autoresponse SMS for successful payment
             if ($phoneNumber) {
+                error_log("[CALLBACK DEBUG] Preparing to send Onfon SMS to {$phoneNumber}");
                 $reference = $transaction['reference'] ?? 'N/A';
                 
                 // Customize message based on transaction type - keep bidders engaged (GSM-7 compatible, no emojis)
@@ -267,12 +282,16 @@ try {
                     $smsMessage = "Payment of Ksh {$amount} received! Ref: {$reference}\nThank you for using LiveAuction!\nDial *855*22#";
                 }
                 
+                error_log("[CALLBACK DEBUG] SMS message prepared: " . substr($smsMessage, 0, 100) . "...");
                 $smsResult = $onfonSms->send($phoneNumber, $smsMessage);
+                error_log("[CALLBACK DEBUG] Onfon SMS result: " . json_encode($smsResult));
                 if ($smsResult['status'] === 'success') {
                     error_log("Onfon autoresponse SMS sent successfully to {$phoneNumber}");
                 } else {
                     error_log("Onfon autoresponse SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
                 }
+            } else {
+                error_log("[CALLBACK DEBUG] No phone number available for SMS");
             }
         } else {
             error_log("Transaction not found for payment: Phone: {$phoneNumber}, Amount: {$amount}, MerchantRequestID: {$merchantRequestID}");

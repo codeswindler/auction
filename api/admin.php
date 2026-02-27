@@ -66,12 +66,20 @@ if ($method === 'GET' && preg_match('#/api/admin/transactions#', $path)) {
         // Get filter parameters from query string
         $typeFilter = isset($_GET['type']) && $_GET['type'] !== 'all' ? $_GET['type'] : null;
         $statusFilter = isset($_GET['status']) && $_GET['status'] !== 'all' ? $_GET['status'] : null;
-        $isFeeFilter = isset($_GET['is_fee']) ? $_GET['is_fee'] : null; // true, false, or null for all
+        // Default to showing only paid fees if not specified
+        $isFeeFilter = isset($_GET['is_fee']) ? $_GET['is_fee'] : 'true'; // Default to fees only
         $sourceFilter = isset($_GET['source']) && $_GET['source'] !== 'all' ? $_GET['source'] : null;
         $phoneNumberFilter = isset($_GET['phone_number']) && $_GET['phone_number'] !== '' ? $_GET['phone_number'] : null;
         $dateFrom = isset($_GET['date_from']) && $_GET['date_from'] !== '' ? $_GET['date_from'] : null;
         $dateTo = isset($_GET['date_to']) && $_GET['date_to'] !== '' ? $_GET['date_to'] : null;
         $limit = isset($_GET['limit']) && $_GET['limit'] > 0 ? (int)$_GET['limit'] : null;
+        
+        // If showing fees only, also filter to paid status
+        if ($isFeeFilter === 'true' || $isFeeFilter === true || $isFeeFilter === '1') {
+            if (!$statusFilter || $statusFilter === 'all') {
+                $statusFilter = 'paid'; // Show only paid fees
+            }
+        }
         
         // Log filters for debugging (remove in production)
         error_log("Transaction filters - type: " . ($typeFilter ?? 'null') . ", status: " . ($statusFilter ?? 'null') . ", is_fee: " . ($isFeeFilter ?? 'null') . ", source: " . ($sourceFilter ?? 'null') . ", phone: " . ($phoneNumberFilter ?? 'null'));
