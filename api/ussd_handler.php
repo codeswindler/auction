@@ -120,7 +120,7 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
 
 // USSD Session Logic Handler
 function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
-    global $USSD_MENU_ENABLED;
+    global $USSD_MENU_ENABLED, $pdo;
     
     // Get or create session
     $session = $storage->getOrCreateSession($sessionId, $msisdn, $ussdCode);
@@ -266,11 +266,15 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     }
 
     $children = $getChildren($currentParentId);
-    $prompt = $currentNode['prompt'] ?? $activeCampaign['root_prompt'];
+    $prompt = $currentNode ? ($currentNode['prompt'] ?? $activeCampaign['root_prompt']) : $activeCampaign['root_prompt'];
     $menuBody = $buildMenu($prompt, $children);
 
     // Debug logging
-    error_log("[USSD DEBUG] Current node: ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}, ChildrenCount=" . count($children));
+    if ($currentNode) {
+        error_log("[USSD DEBUG] Current node: ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}, ChildrenCount=" . count($children));
+    } else {
+        error_log("[USSD DEBUG] Current node: null (root menu), ChildrenCount=" . count($children));
+    }
 
     if (count($children) > 0) {
         $storage->updateSession($sessionId, 'campaign_menu:' . $activeCampaign['id'] . ':' . ($currentParentId ?? 'root'), $input);
