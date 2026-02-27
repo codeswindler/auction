@@ -52,9 +52,14 @@ function parseUSSDInput($input) {
     return ['parts' => $userParts, 'lastInput' => $lastInput];
 }
 
-// Helper function to generate a unique reference code
+// Helper function to generate a unique reference code (7 chars: BMSDX0J format)
 function generateRef() {
-    return strtoupper(substr(md5(uniqid(rand(), true)), 0, 8));
+    $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    $ref = '';
+    for ($i = 0; $i < 7; $i++) {
+        $ref .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+    return $ref;
 }
 
 // Helper function to validate numeric input (for ID numbers and menu selections)

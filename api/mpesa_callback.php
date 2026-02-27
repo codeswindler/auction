@@ -6,8 +6,10 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/Storage.php';
+require_once __DIR__ . '/onfon-sms.service.php';
 
 $storage = new Storage($pdo);
+$onfonSms = new OnfonSmsService();
 
 // Security: Log all incoming requests to identify sources
 $clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
@@ -232,10 +234,46 @@ try {
                         $storage->updateUserBalance($transaction['user_id'], number_format($newBalance, 2, '.', ''));
                         error_log("Deposit balance updated: User ID {$transaction['user_id']}, Amount: {$depositAmount}, New Balance: {$newBalance}");
                     }
-                }
+                    }
                     }
                     
             error_log("Payment recorded: Transaction ID {$transaction['id']}, Type: " . ($transaction['is_fee'] ? 'Fee' : 'Main') . ", M-Pesa Receipt: {$mpesaReceipt}, Amount: {$amount}");
+            
+            // Send Onfon autoresponse SMS for successful payment
+            if ($phoneNumber) {
+                $reference = $transaction['reference'] ?? 'N/A';
+                
+                // Customize message based on transaction type - keep bidders engaged (GSM-7 compatible, no emojis)
+                if ($transaction['is_fee'] == 1 || $transaction['type'] === 'bid_fee') {
+                    // Bid fee payment - create urgency and excitement
+                    $messages = [
+                        "Bid fee Ksh {$amount} received! Ref: {$reference}\nYour bid is LIVE! Others are bidding too...\nStay sharp! Dial *855*22#",
+                        "Bid fee confirmed! Ksh {$amount} | Ref: {$reference}\nYou're in the game! Competition is heating up.\nDial *855*22# to stay ahead!",
+                        "Bid active! Ksh {$amount} | Ref: {$reference}\nThe action is intense! Don't miss out.\nDial *855*22# now!",
+                        "Bid fee received! Ksh {$amount} | Ref: {$reference}\nYou're competing! Others are watching.\nDial *855*22# to keep bidding!",
+                        "Bid confirmed! Ksh {$amount} | Ref: {$reference}\nYou're in the race! Every bid counts.\nDial *855*22# to continue!"
+                    ];
+                    $smsMessage = $messages[array_rand($messages)];
+                } elseif ($transaction['type'] === 'bid') {
+                    // Main bid payment
+                    $messages = [
+                        "Bid {$reference} of Ksh {$amount} placed!\nThe competition is fierce! Keep bidding.\nDial *855*22#",
+                        "Your bid {$reference} (Ksh {$amount}) is active!\nOthers are bidding too. Stay competitive!\nDial *855*22#",
+                        "Bid {$reference} confirmed! Ksh {$amount}\nYou're in the game! Don't stop now.\nDial *855*22# to bid again!"
+                    ];
+                    $smsMessage = $messages[array_rand($messages)];
+                } else {
+                    // Other payments
+                    $smsMessage = "Payment of Ksh {$amount} received! Ref: {$reference}\nThank you for using LiveAuction!\nDial *855*22#";
+                }
+                
+                $smsResult = $onfonSms->send($phoneNumber, $smsMessage);
+                if ($smsResult['status'] === 'success') {
+                    error_log("Onfon autoresponse SMS sent successfully to {$phoneNumber}");
+                } else {
+                    error_log("Onfon autoresponse SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
+                }
+            }
         } else {
             error_log("Transaction not found for payment: Phone: {$phoneNumber}, Amount: {$amount}, MerchantRequestID: {$merchantRequestID}");
         }
@@ -332,6 +370,13 @@ try {
             $stmt->execute([$transaction['id']]);
             
             error_log("Transaction {$transaction['id']} marked as failed: {$resultDesc} (ResultCode: {$resultCode}, MerchantRequestID: {$merchantRequestID})");
+            
+            // Send Onfon autoresponse SMS for failed payment (optional)
+            // Uncomment if you want to notify users of failed payments
+            // if ($phoneNumber) {
+            //     $smsMessage = "Payment of Ksh {$amount} was not successful. Please try again.";
+            //     $onfonSms->send($phoneNumber, $smsMessage);
+            // }
             
         } else {
             error_log("Failed payment callback received but transaction not found: MerchantRequestID: {$merchantRequestID}, CheckoutRequestID: {$checkoutRequestID}");
