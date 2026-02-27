@@ -123,6 +123,21 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     $parts = $parsed['parts'];
     $lastInput = $parsed['lastInput'];
     $level = count($parts);
+    
+    // Fix: If this is the first dial and INPUT is just a plain number (like "22" from *855*22#),
+    // treat it as the initial dial (empty parts) to show the root menu
+    $isFirstDial = empty($session['current_menu']) || $session['current_menu'] === 'main' || 
+                   (strpos($session['current_menu'] ?? '', 'campaign_menu:') === false && 
+                    strpos($session['current_menu'] ?? '', 'campaign_menu_invalid') === false);
+    $isPlainNumber = preg_match('/^[0-9]+$/', $input) === 1 && strpos($input, '*') === false && strpos($input, '#') === false;
+    
+    if ($isFirstDial && $isPlainNumber && count($parts) > 0) {
+        // This is the first dial with a plain number - ignore it and show root menu
+        error_log("[USSD FIX] First dial detected with plain number input: '$input' - treating as initial dial");
+        $parts = [];
+        $lastInput = '';
+        $level = 0;
+    }
 
     // Log USSD session step details with full debugging info
     // Use a simple cache file to prevent duplicate logging from gateway retries
