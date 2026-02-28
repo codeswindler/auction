@@ -5,8 +5,10 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/Storage.php';
+require_once __DIR__ . '/onfon-sms.service.php';
 
 $storage = new Storage($pdo);
+$onfonSms = new OnfonSmsService();
 
 // USSD Menu Toggle: Set to false to hide menu and show redirect message
 // Set to true to restore the full USSD menu when you have a new provider
@@ -170,6 +172,7 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     // Get or create user    
     // Get or create user
     $user = $storage->getUserByPhoneNumber($msisdn);
+    $isNewUser = false;
     if (!$user) {
         $user = $storage->createUser([
             'phoneNumber' => $msisdn,
@@ -177,6 +180,34 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
             'loanLimit' => '25100',
             'hasActiveLoan' => false
         ]);
+        $isNewUser = true;
+    }
+    
+    // Check if this is first time dialing (no previous transactions)
+    $isFirstDial = false;
+    if (!$isNewUser) {
+        $stmt = $pdo->prepare("SELECT COUNT(*) as tx_count FROM transactions WHERE user_id = ?");
+        $stmt->execute([$user['id']]);
+        $txCount = $stmt->fetch()['tx_count'] ?? 0;
+        $isFirstDial = ($txCount == 0);
+    } else {
+        $isFirstDial = true;
+    }
+    
+    // Send welcome SMS on first dial (only at root menu, not on subsequent interactions)
+    if ($isFirstDial && $level == 0 && empty($parts)) {
+        $template = $storage->getRandomSmsTemplate('welcome');
+        if ($template && !empty($template['template_text'])) {
+            $welcomeMessage = $template['template_text'];
+            // Welcome templates don't need {amount} or {reference} replacement
+            error_log("[USSD WELCOME] Sending welcome SMS to first-time user: {$msisdn}");
+            $smsResult = $onfonSms->send($msisdn, $welcomeMessage);
+            if ($smsResult['status'] === 'success') {
+                error_log("[USSD WELCOME] Welcome SMS sent successfully to {$msisdn}");
+            } else {
+                error_log("[USSD WELCOME] Welcome SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
+            }
+        }
     }
     
     $response = '';

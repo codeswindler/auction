@@ -13,11 +13,9 @@ import { MessageSquare, Plus, Edit, Trash2, Check, X, AlertCircle } from "lucide
 import { api } from "@shared/routes";
 
 const TRANSACTION_TYPES = [
-  { value: 'bid_fee', label: 'Bid Fee', description: 'Sent when bid fee payment succeeds', used: true },
-  { value: 'bid', label: 'Bid', description: 'Sent when main bid payment succeeds', used: true },
-  { value: 'payment_failed', label: 'Payment Failed', description: 'Sent when payment fails (except cancellation)', used: true },
-  { value: 'payment_cancelled', label: 'Payment Cancelled', description: 'Sent when user cancels STK push (ResultCode 1032)', used: true },
-  { value: 'other', label: 'Other', description: 'Fallback for other successful payments', used: true },
+  { value: 'welcome', label: 'Welcome', description: 'Sent when user dials for the first time', used: true },
+  { value: 'bid_success', label: 'Bid Success', description: 'Sent when bid or bid fee payment succeeds', used: true },
+  { value: 'payment_failed', label: 'Payment Failed', description: 'Sent when payment fails or is cancelled', used: true },
 ] as const;
 
 type TransactionType = typeof TRANSACTION_TYPES[number]['value'];
@@ -39,7 +37,7 @@ export function SmsTemplateManager() {
   const [editingTemplate, setEditingTemplate] = useState<SmsTemplate | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
-    transactionType: 'bid_fee' as TransactionType,
+    transactionType: 'welcome' as TransactionType,
     templateText: '',
     isActive: true,
     displayOrder: 0,
@@ -217,7 +215,9 @@ export function SmsTemplateManager() {
               {preview}
             </div>
             <div className="text-xs text-muted-foreground">
-              <div>Variables: {'{amount}'}, {'{reference}'}</div>
+              {template.transactionType === 'welcome' 
+                ? <div>No variables</div>
+                : <div>Variables: {'{amount}'}, {'{reference}'}</div>}
             </div>
           </div>
           <div className="flex flex-col gap-2 ml-4">
@@ -306,12 +306,18 @@ export function SmsTemplateManager() {
                 <Textarea
                   value={formData.templateText}
                   onChange={(e) => setFormData({ ...formData, templateText: e.target.value })}
-                  placeholder="Bid fee Ksh {amount} received! Ref: {reference}&#10;Your bid is LIVE! Others are bidding too...&#10;Stay sharp! Dial *855*22#"
+                  placeholder={formData.transactionType === 'welcome' 
+                    ? "Welcome to LiveAuction!&#10;Start bidding now and win amazing prizes.&#10;Dial *855*22# to begin!"
+                    : formData.transactionType === 'bid_success'
+                    ? "Bid fee Ksh {amount} received! Ref: {reference}&#10;Your bid is LIVE! Others are bidding too...&#10;Stay sharp! Dial *855*22#"
+                    : "Payment of Ksh {amount} failed.&#10;Don't miss out! Dial *855*22# to retry now."}
                   rows={6}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Available variables: {'{amount}'}, {'{reference}'}
+                  {formData.transactionType === 'welcome' 
+                    ? 'No variables needed for welcome messages'
+                    : `Available variables: {'{amount}'}, {'{reference}'}`}
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -360,7 +366,7 @@ export function SmsTemplateManager() {
       </div>
 
       <Tabs value={selectedType} onValueChange={(value) => setSelectedType(value as TransactionType)}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3">
           {TRANSACTION_TYPES.map(type => (
             <TabsTrigger key={type.value} value={type.value} title={type.description}>
               {type.label}

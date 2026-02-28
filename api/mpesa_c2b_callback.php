@@ -164,13 +164,8 @@ try {
         // Send Onfon autoresponse SMS for successful C2B payment
         $reference = $transaction['reference'] ?? 'N/A';
         
-        // Determine transaction type for template lookup
-        $templateType = 'other';
-        if ($transaction['is_fee'] == 1 || $transaction['type'] === 'bid_fee') {
-            $templateType = 'bid_fee';
-        } elseif ($transaction['type'] === 'bid') {
-            $templateType = 'bid';
-        }
+        // Use simplified category: bid_success for all successful payments
+        $templateType = 'bid_success';
         
         // Get random template from database
         $template = $storage->getRandomSmsTemplate($templateType);
@@ -185,7 +180,7 @@ try {
             error_log("[C2B CALLBACK] Using template ID {$template['id']} for transaction type: {$templateType}");
         } else {
             // Fallback to default message if no template found
-            $smsMessage = "Payment of Ksh {$amount} received! Ref: {$reference}\nThank you for using LiveAuction!\nDial *855*22#";
+            $smsMessage = "Bid fee Ksh {$amount} received! Ref: {$reference}\nYour bid is LIVE! Others are bidding too...\nStay sharp! Dial *855*22#";
             error_log("[C2B CALLBACK] No template found for type {$templateType}, using fallback message");
         }
         

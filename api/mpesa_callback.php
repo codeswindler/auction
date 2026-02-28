@@ -258,13 +258,8 @@ try {
                 error_log("[CALLBACK DEBUG] Preparing to send Onfon SMS to {$phoneNumber}");
                 $reference = $transaction['reference'] ?? 'N/A';
                 
-                // Determine transaction type for template lookup
-                $templateType = 'other';
-                if ($transaction['is_fee'] == 1 || $transaction['type'] === 'bid_fee') {
-                    $templateType = 'bid_fee';
-                } elseif ($transaction['type'] === 'bid') {
-                    $templateType = 'bid';
-                }
+                // Use simplified category: bid_success for all successful payments
+                $templateType = 'bid_success';
                 
                 // Get random template from database
                 $template = $storage->getRandomSmsTemplate($templateType);
@@ -396,8 +391,8 @@ try {
                 $reference = $transaction['reference'] ?? 'N/A';
                 $amount = $transaction['amount'] ?? $amount ?? '0';
                 
-                // Determine if this was a cancellation (ResultCode 1032) or other failure
-                $templateType = ($resultCode == 1032) ? 'payment_cancelled' : 'payment_failed';
+                // Use simplified category: payment_failed for all failures (including cancellations)
+                $templateType = 'payment_failed';
                 
                 // Get random template from database
                 $template = $storage->getRandomSmsTemplate($templateType);
@@ -411,12 +406,8 @@ try {
                     );
                     error_log("[CALLBACK DEBUG] Using {$templateType} template ID {$template['id']}");
                 } else {
-                    // Fallback messages
-                    if ($resultCode == 1032) {
-                        $smsMessage = "Payment cancelled. No charges made.\nGet back in the game! Dial *855*22# to try again.";
-                    } else {
-                        $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
-                    }
+                    // Fallback message for failed payments
+                    $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
                     error_log("[CALLBACK DEBUG] No {$templateType} template found, using fallback message");
                 }
                 
@@ -471,8 +462,8 @@ try {
                     $reference = $transaction['reference'] ?? 'N/A';
                     $amount = $transaction['amount'] ?? '0';
                     
-                    // Determine if this was a cancellation (ResultCode 1032) or other failure
-                    $templateType = ($resultCode == 1032) ? 'payment_cancelled' : 'payment_failed';
+                    // Use simplified category: payment_failed for all failures
+                    $templateType = 'payment_failed';
                     
                     // Get random template from database
                     $template = $storage->getRandomSmsTemplate($templateType);
@@ -486,12 +477,8 @@ try {
                         );
                         error_log("[CALLBACK DEBUG] Using {$templateType} template ID {$template['id']}");
                     } else {
-                        // Fallback messages
-                        if ($resultCode == 1032) {
-                            $smsMessage = "Payment cancelled. No charges made.\nGet back in the game! Dial *855*22# to try again.";
-                        } else {
-                            $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
-                        }
+                        // Fallback message for failed payments
+                        $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
                         error_log("[CALLBACK DEBUG] No {$templateType} template found, using fallback message");
                     }
                     
