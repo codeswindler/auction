@@ -3,16 +3,20 @@
 -- 2. bid_success - Successful bid/bid fee payments
 -- 3. payment_failed - Failed or cancelled payments
 
--- First, update existing templates to new categories
+-- Step 1: First change ENUM to include new categories (keeping old ones temporarily)
+ALTER TABLE sms_templates 
+MODIFY COLUMN transaction_type ENUM('bid_fee', 'bid', 'payment_failed', 'payment_cancelled', 'other', 'welcome', 'bid_success') NOT NULL;
+
+-- Step 2: Now update existing templates to new categories
 UPDATE sms_templates 
 SET transaction_type = 'bid_success' 
 WHERE transaction_type IN ('bid_fee', 'bid', 'other');
 
 UPDATE sms_templates 
 SET transaction_type = 'payment_failed' 
-WHERE transaction_type IN ('payment_failed', 'payment_cancelled');
+WHERE transaction_type IN ('payment_cancelled');
 
--- Change ENUM to new categories
+-- Step 3: Finally, change ENUM to only new categories
 ALTER TABLE sms_templates 
 MODIFY COLUMN transaction_type ENUM('welcome', 'bid_success', 'payment_failed') NOT NULL;
 
