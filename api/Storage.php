@@ -563,19 +563,45 @@ class Storage {
     }
     
     public function updateSmsTemplate($id, $data) {
-        // If activating, check active count
+        // If activating, check active count (excluding current template)
         if (isset($data['is_active']) && $data['is_active']) {
             $template = $this->getSmsTemplateById($id);
             if ($template) {
+                // Get the transaction type (might be changing, so check both old and new)
+                $transactionType = $data['transaction_type'] ?? $template['transaction_type'];
+                
                 $activeCount = $this->pdo->prepare("
                     SELECT COUNT(*) FROM sms_templates 
                     WHERE transaction_type = ? AND is_active = 1 AND id != ?
                 ");
-                $activeCount->execute([$template['transaction_type'], $id]);
+                $activeCount->execute([$transactionType, $id]);
                 $count = $activeCount->fetchColumn();
                 
-                if ($count >= 5) {
+                // If current template is already active, we're just updating it, so allow it
+                $currentIsActive = $template['is_active'] == 1;
+                if (!$currentIsActive && $count >= 5) {
                     throw new Exception("Maximum 5 active templates allowed per transaction type");
+                }
+            }
+        }
+        
+        // If changing transaction type, check active count for the new type
+        if (isset($data['transaction_type'])) {
+            $template = $this->getSmsTemplateById($id);
+            if ($template && $data['transaction_type'] !== $template['transaction_type']) {
+                // Changing to a different transaction type
+                $willBeActive = isset($data['is_active']) ? $data['is_active'] : ($template['is_active'] == 1);
+                if ($willBeActive) {
+                    $activeCount = $this->pdo->prepare("
+                        SELECT COUNT(*) FROM sms_templates 
+                        WHERE transaction_type = ? AND is_active = 1
+                    ");
+                    $activeCount->execute([$data['transaction_type']]);
+                    $count = $activeCount->fetchColumn();
+                    
+                    if ($count >= 5) {
+                        throw new Exception("Maximum 5 active templates allowed per transaction type");
+                    }
                 }
             }
         }

@@ -633,6 +633,12 @@ if ($method === 'PUT' && preg_match('#/api/admin/sms-templates/(\d+)#', $path, $
         $json = file_get_contents('php://input');
         $data = json_decode($json, true);
         
+        // Get current template to check if we're changing active status
+        $currentTemplate = $storage->getSmsTemplateById($id);
+        if (!$currentTemplate) {
+            jsonResponse(['error' => 'Template not found'], 404);
+        }
+        
         $updateData = [];
         if (isset($data['transaction_type'])) {
             $updateData['transaction_type'] = $data['transaction_type'];
@@ -641,7 +647,8 @@ if ($method === 'PUT' && preg_match('#/api/admin/sms-templates/(\d+)#', $path, $
             $updateData['template_text'] = $data['template_text'];
         }
         if (isset($data['is_active'])) {
-            $updateData['is_active'] = $data['is_active'];
+            // Convert boolean to int for database
+            $updateData['is_active'] = $data['is_active'] ? 1 : 0;
         }
         if (isset($data['display_order'])) {
             $updateData['display_order'] = $data['display_order'];
