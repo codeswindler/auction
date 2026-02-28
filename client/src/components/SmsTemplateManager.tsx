@@ -192,6 +192,10 @@ export function SmsTemplateManager() {
     return TRANSACTION_TYPES.find(t => t.value === type)?.label || type;
   };
 
+  const getTypeDescription = (type: TransactionType) => {
+    return TRANSACTION_TYPES.find(t => t.value === type)?.description || '';
+  };
+
   const renderTemplate = (template: SmsTemplate) => {
     const preview = template.templateText
       .replace(/{amount}/g, 'Ksh 50')
@@ -370,7 +374,7 @@ export function SmsTemplateManager() {
               <div>
                 <h3 className="font-semibold">{getTypeLabel(type.value)} Templates</h3>
                 <p className="text-sm text-muted-foreground">
-                  {TRANSACTION_TYPES.find(t => t.value === type.value)?.description}
+                  {getTypeDescription(type.value)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {activeTemplates.length} active, {inactiveTemplates.length} inactive
