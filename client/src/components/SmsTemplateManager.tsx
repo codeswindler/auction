@@ -82,6 +82,7 @@ export function SmsTemplateManager() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      console.log(`[TEMPLATE UPDATE] Updating template ID ${id} with data:`, JSON.stringify(data));
       const response = await fetch(`/api/admin/sms-templates/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -169,18 +170,26 @@ export function SmsTemplateManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Convert camelCase to snake_case for API
-    const apiData = {
-      transaction_type: formData.transactionType,
-      template_text: formData.templateText,
-      is_active: formData.isActive,
-      display_order: formData.displayOrder,
-    };
     
-    if (editingTemplate) {
-      updateMutation.mutate({ id: editingTemplate.id, data: apiData });
-    } else {
+    if (!editingTemplate) {
+      // Creating new template
+      const apiData = {
+        transaction_type: formData.transactionType,
+        template_text: formData.templateText,
+        is_active: formData.isActive,
+        display_order: formData.displayOrder,
+      };
       createMutation.mutate(apiData);
+    } else {
+      // Updating existing template - use the template ID
+      const apiData = {
+        transaction_type: formData.transactionType,
+        template_text: formData.templateText,
+        is_active: formData.isActive,
+        display_order: formData.displayOrder,
+      };
+      console.log('[TEMPLATE UPDATE] Updating template:', editingTemplate.id, apiData);
+      updateMutation.mutate({ id: editingTemplate.id, data: apiData });
     }
   };
 
@@ -274,7 +283,14 @@ export function SmsTemplateManager() {
             </p>
           </div>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            // Only reset when closing, not when opening
+            setEditingTemplate(null);
+            resetForm();
+          }
+        }}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
               <Plus className="w-4 h-4 mr-2" />
