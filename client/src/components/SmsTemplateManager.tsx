@@ -57,7 +57,7 @@ export function SmsTemplateManager() {
   const inactiveTemplates = filteredTemplates.filter(t => !t.isActive);
 
   const createMutation = useMutation({
-    mutationFn: async (data: Partial<SmsTemplate>) => {
+    mutationFn: async (data: any) => {
       const response = await fetch('/api/admin/sms-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -81,7 +81,7 @@ export function SmsTemplateManager() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<SmsTemplate> }) => {
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
       const response = await fetch(`/api/admin/sms-templates/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -169,10 +169,18 @@ export function SmsTemplateManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Convert camelCase to snake_case for API
+    const apiData = {
+      transaction_type: formData.transactionType,
+      template_text: formData.templateText,
+      is_active: formData.isActive,
+      display_order: formData.displayOrder,
+    };
+    
     if (editingTemplate) {
-      updateMutation.mutate({ id: editingTemplate.id, data: formData });
+      updateMutation.mutate({ id: editingTemplate.id, data: apiData });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(apiData);
     }
   };
 
