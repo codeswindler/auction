@@ -26,7 +26,7 @@ function parseUSSDInput($input) {
 
     $startsWithStar = strpos($input, '*') === 0;
     $endsWithHash = substr($input, -1) === '#';
-    $gatewaySuffixes = ['65', '63', '22'];
+    $gatewaySuffixes = ['65', '63', '22', '55'];
 
     if (count($parts) > 0 && in_array($parts[0], $gatewaySuffixes, true)) {
         // INPUT starts with gateway suffix (e.g. 63 or 65), user input starts at index 1
