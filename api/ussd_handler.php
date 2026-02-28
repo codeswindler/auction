@@ -141,7 +141,7 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
 
 // USSD Session Logic Handler
 function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
-    global $USSD_MENU_ENABLED, $pdo;
+    global $USSD_MENU_ENABLED, $pdo, $onfonSms;
     
     // Get or create session
     $session = $storage->getOrCreateSession($sessionId, $msisdn, $ussdCode);
