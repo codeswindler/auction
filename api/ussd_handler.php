@@ -75,7 +75,12 @@ function isValidNumeric($input) {
  */
 function triggerSTKPush($transactionId, $phoneNumber, $amount) {
     // Log the attempt
-    error_log("[STK PUSH] Attempting to trigger STK push: Transaction ID {$transactionId}, Phone: {$phoneNumber}, Amount: {$amount}");
+    $logMessage = "[STK PUSH] Attempting to trigger STK push: Transaction ID {$transactionId}, Phone: {$phoneNumber}, Amount: {$amount}";
+    error_log($logMessage);
+    
+    // Also write to dedicated log file
+    $stkLogFile = '/var/log/stk_push.log';
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMessage . "\n", FILE_APPEND);
     
     // Get the base URL for internal API calls
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -86,6 +91,7 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
     $stkPushUrl = $baseUrl . '/api/mpesa/stk-push';
     
     error_log("[STK PUSH] Calling internal endpoint: {$stkPushUrl}");
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . " - [STK PUSH] Calling endpoint: {$stkPushUrl}\n", FILE_APPEND);
     
     $postData = json_encode([
         'transactionId' => $transactionId,
@@ -93,7 +99,7 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
         'amount' => $amount
     ]);
     
-    // Make non-blocking cURL call so STK push happens after USSD response is sent
+    // Make cURL call to trigger STK push
     $ch = curl_init($stkPushUrl);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
@@ -102,22 +108,35 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
         'Content-Type: application/json',
         'Content-Length: ' . strlen($postData)
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10); // 10 second timeout
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // 30 second timeout
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_NOSIGNAL, 1); // Non-blocking
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
     
-    // Execute asynchronously (don't wait for response - it will be logged by the STK push endpoint)
-    curl_exec($ch);
+    // Execute the request and capture response
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
     curl_close($ch);
     
     if ($curlError) {
-        error_log("[STK PUSH ERROR] Failed to trigger STK push for transaction $transactionId: $curlError");
+        $errorMsg = "[STK PUSH ERROR] Failed to trigger STK push for transaction $transactionId: $curlError";
+        error_log($errorMsg);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $errorMsg . "\n", FILE_APPEND);
         return false;
     }
     
-    // Request initiated successfully (response will be logged by the STK push endpoint)
-    return true;
+    // Log the response
+    $responseMsg = "[STK PUSH] Response for transaction {$transactionId}: HTTP {$httpCode} - " . substr($response, 0, 200);
+    error_log($responseMsg);
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $responseMsg . "\n", FILE_APPEND);
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return true;
+    } else {
+        error_log("[STK PUSH ERROR] HTTP {$httpCode} response for transaction {$transactionId}");
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . " - [STK PUSH ERROR] HTTP {$httpCode} response\n", FILE_APPEND);
+        return false;
+    }
 }
 
 // USSD Session Logic Handler
@@ -335,6 +354,11 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         $response = "CON " . $menuBody;
     } else if (($currentNode['action_type'] ?? null) === 'bid') {
         error_log("[USSD DEBUG] Bid action detected for node: {$currentNode['label']}");
+        
+        // Also log to dedicated file
+        $ussdLogFile = '/var/log/ussd_debug.log';
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [BID ACTION] Node: {$currentNode['label']}, Phone: {$msisdn}\n", FILE_APPEND);
+        
         $payload = [];
         if (!empty($currentNode['action_payload'])) {
             $decoded = json_decode($currentNode['action_payload'], true);
@@ -344,45 +368,84 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         }
         $bidAmount = isset($payload['amount']) ? (float)$payload['amount'] : 0;
         if (!is_finite($bidAmount) || $bidAmount <= 0) {
+            error_log("[USSD ERROR] Invalid bid amount: {$bidAmount}");
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [ERROR] Invalid bid amount: {$bidAmount}\n", FILE_APPEND);
             return "END Invalid campaign configuration. Please try again later.";
         }
 
-            $ref = generateRef();
-            $minFee = isset($activeCampaign['bid_fee_min']) ? floatval($activeCampaign['bid_fee_min']) : 30;
-            $maxFee = isset($activeCampaign['bid_fee_max']) ? floatval($activeCampaign['bid_fee_max']) : 99;
-            $low = max(0, min($minFee, $maxFee));
-            $high = max(0, max($minFee, $maxFee));
-            $feeAmount = rand((int)$low, (int)$high);
-            $promptTemplate = $activeCampaign['bid_fee_prompt'] ?? "Please complete the bid on MPesa, ref: {{ref}}.";
-            $promptMessage = preg_replace('/\{\{\s*ref\s*\}\}/i', $ref, $promptTemplate);
-            $response = "END " . $promptMessage;
+        $ref = generateRef();
+        $minFee = isset($activeCampaign['bid_fee_min']) ? floatval($activeCampaign['bid_fee_min']) : 30;
+        $maxFee = isset($activeCampaign['bid_fee_max']) ? floatval($activeCampaign['bid_fee_max']) : 99;
+        $low = max(0, min($minFee, $maxFee));
+        $high = max(0, max($minFee, $maxFee));
+        $feeAmount = rand((int)$low, (int)$high);
+        $promptTemplate = $activeCampaign['bid_fee_prompt'] ?? "Please complete the bid on MPesa, ref: {{ref}}.";
+        $promptMessage = preg_replace('/\{\{\s*ref\s*\}\}/i', $ref, $promptTemplate);
+        $response = "END " . $promptMessage;
         $shouldEnd = true;
 
-        $bidTransactionId = $storage->createTransaction([
-            'userId' => $user['id'],
-            'type' => 'bid',
-            'amount' => number_format($bidAmount, 2, '.', ''),
-            'reference' => $ref,
-            'status' => 'pending',
-            'source' => 'ussd'
-        ]);
+        // Dedicated log file for USSD debugging
+        $ussdLogFile = '/var/log/ussd_debug.log';
         
-        // Store bid selection (product label) in payment_name field for display
-        $bidLabel = $currentNode['label'] ?? 'Unknown';
-        $stmt = $pdo->prepare("UPDATE transactions SET payment_name = ? WHERE id = ?");
-        $stmt->execute([$bidLabel, $bidTransactionId]);
+        error_log("[USSD BID] Creating bid transaction: Ref={$ref}, Amount={$bidAmount}, Fee={$feeAmount}");
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [BID TX] Creating: Ref={$ref}, Amount={$bidAmount}, Fee={$feeAmount}\n", FILE_APPEND);
 
-        $feeRef = $ref . '-FEE';
-        $feeTransactionId = $storage->createFeeTransaction($user['id'], number_format($feeAmount, 2, '.', ''), $feeRef, $bidTransactionId, 'bid_fee', 'ussd');
+        try {
+            $bidTransactionId = $storage->createTransaction([
+                'userId' => $user['id'],
+                'type' => 'bid',
+                'amount' => number_format($bidAmount, 2, '.', ''),
+                'reference' => $ref,
+                'status' => 'pending',
+                'source' => 'ussd'
+            ]);
+            
+            error_log("[USSD BID] Bid transaction created: ID={$bidTransactionId}");
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [BID TX] Created bid transaction ID: {$bidTransactionId}\n", FILE_APPEND);
+            
+            // Store bid selection (product label) in payment_name field for display
+            $bidLabel = $currentNode['label'] ?? 'Unknown';
+            $stmt = $pdo->prepare("UPDATE transactions SET payment_name = ? WHERE id = ?");
+            $stmt->execute([$bidLabel, $bidTransactionId]);
+
+            $feeRef = $ref . '-FEE';
+            $feeTransactionId = $storage->createFeeTransaction($user['id'], number_format($feeAmount, 2, '.', ''), $feeRef, $bidTransactionId, 'bid_fee', 'ussd');
+            
+            error_log("[USSD BID] Fee transaction created: ID={$feeTransactionId}, Ref={$feeRef}");
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [BID TX] Created fee transaction ID: {$feeTransactionId}, Ref: {$feeRef}\n", FILE_APPEND);
+        } catch (Exception $e) {
+            error_log("[USSD ERROR] Failed to create transactions: " . $e->getMessage());
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [ERROR] Transaction creation failed: " . $e->getMessage() . "\n", FILE_APPEND);
+            return "END System error. Please try again later.";
+        }
 
         $formattedPhone = preg_replace('/[^0-9]/', '', $msisdn);
         if (substr($formattedPhone, 0, 1) === '0') {
             $formattedPhone = '254' . substr($formattedPhone, 1);
         }
 
-        register_shutdown_function(function() use ($feeTransactionId, $formattedPhone, $feeAmount) {
-            error_log("[STK PUSH] Triggering bid fee STK push: Transaction ID {$feeTransactionId}, Phone: {$formattedPhone}, Amount: {$feeAmount}");
-            triggerSTKPush($feeTransactionId, $formattedPhone, $feeAmount);
+        // Log immediately that we're about to trigger STK push
+        error_log("[STK PUSH] Preparing to trigger bid fee STK push: Transaction ID {$feeTransactionId}, Phone: {$formattedPhone}, Amount: {$feeAmount}");
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . " - [STK PUSH] Preparing: TX ID={$feeTransactionId}, Phone={$formattedPhone}, Amount={$feeAmount}\n", FILE_APPEND);
+        
+        // Use register_shutdown_function to trigger STK push after USSD response is sent
+        // This ensures the USSD response is sent first, then STK push happens
+        register_shutdown_function(function() use ($feeTransactionId, $formattedPhone, $feeAmount, $ussdLogFile) {
+            // Write to both error_log and a dedicated log file for visibility
+            $logMessage = "[STK PUSH] Triggering bid fee STK push: Transaction ID {$feeTransactionId}, Phone: {$formattedPhone}, Amount: {$feeAmount}";
+            error_log($logMessage);
+            
+            // Also write to a dedicated log file
+            $stkLogFile = '/var/log/stk_push.log';
+            @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMessage . "\n", FILE_APPEND);
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $logMessage . "\n", FILE_APPEND);
+            
+            $result = triggerSTKPush($feeTransactionId, $formattedPhone, $feeAmount);
+            
+            $resultMessage = $result ? "SUCCESS" : "FAILED";
+            error_log("[STK PUSH] Result for transaction {$feeTransactionId}: {$resultMessage}");
+            @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - [STK PUSH] Result: ' . $resultMessage . "\n", FILE_APPEND);
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - [STK PUSH] Result: ' . $resultMessage . "\n", FILE_APPEND);
         });
 
         $storage->updateSession($sessionId, 'bid_payment', $input);
