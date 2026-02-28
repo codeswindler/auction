@@ -391,12 +391,42 @@ try {
             
             error_log("Transaction {$transaction['id']} marked as failed: {$resultDesc} (ResultCode: {$resultCode}, MerchantRequestID: {$merchantRequestID})");
             
-            // Send Onfon autoresponse SMS for failed payment (optional)
-            // Uncomment if you want to notify users of failed payments
-            // if ($phoneNumber) {
-            //     $smsMessage = "Payment of Ksh {$amount} was not successful. Please try again.";
-            //     $onfonSms->send($phoneNumber, $smsMessage);
-            // }
+            // Send Onfon autoresponse SMS for failed payment
+            if ($phoneNumber) {
+                $reference = $transaction['reference'] ?? 'N/A';
+                $amount = $transaction['amount'] ?? $amount ?? '0';
+                
+                // Determine if this was a cancellation (ResultCode 1032) or other failure
+                $templateType = ($resultCode == 1032) ? 'payment_cancelled' : 'payment_failed';
+                
+                // Get random template from database
+                $template = $storage->getRandomSmsTemplate($templateType);
+                
+                if ($template && !empty($template['template_text'])) {
+                    // Replace placeholders with actual values
+                    $smsMessage = str_replace(
+                        ['{amount}', '{reference}'],
+                        [$amount, $reference],
+                        $template['template_text']
+                    );
+                    error_log("[CALLBACK DEBUG] Using {$templateType} template ID {$template['id']}");
+                } else {
+                    // Fallback messages
+                    if ($resultCode == 1032) {
+                        $smsMessage = "Payment cancelled. No charges made.\nGet back in the game! Dial *855*22# to try again.";
+                    } else {
+                        $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
+                    }
+                    error_log("[CALLBACK DEBUG] No {$templateType} template found, using fallback message");
+                }
+                
+                $smsResult = $onfonSms->send($phoneNumber, $smsMessage);
+                if ($smsResult['status'] === 'success') {
+                    error_log("Onfon autoresponse SMS sent successfully to {$phoneNumber} for failed payment");
+                } else {
+                    error_log("Onfon autoresponse SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
+                }
+            }
             
         } else {
             error_log("Failed payment callback received but transaction not found: MerchantRequestID: {$merchantRequestID}, CheckoutRequestID: {$checkoutRequestID}");
@@ -434,20 +464,42 @@ try {
                 $stmt->execute([$transaction['id']]);
                 error_log("Transaction {$transaction['id']} marked as failed: {$resultDesc} (ResultCode: {$resultCode})");
                 
-                // If user cancelled the STK push (ResultCode 1032), send USSD Push notification
-                if ($resultCode == 1032) {
-                    // Get user phone number to send notification
-                    $user = $storage->getUserById($transaction['user_id']);
-                    if ($user && isset($user['phone_number'])) {
-                        $phoneNumber = $user['phone_number'];
-                        $ussdCode = '*519*65#';
-                        $message = "Please note you need to complete the transaction to proceed. Dial {$ussdCode} to try again.";
-                        
-                        error_log("[NOTIFICATION] STK Push cancelled by user. Sending USSD Push notification to {$phoneNumber}: {$message}");
-                        
-                        // Send USSD Push notification (popup on user's phone)
-                        // This will appear as a popup similar to USSD sessions
-                        sendUSSDPushNotification($phoneNumber, $message);
+                // Send SMS notification for failed/cancelled payment
+                $user = $storage->getUserById($transaction['user_id']);
+                if ($user && isset($user['phone_number'])) {
+                    $phoneNumber = $user['phone_number'];
+                    $reference = $transaction['reference'] ?? 'N/A';
+                    $amount = $transaction['amount'] ?? '0';
+                    
+                    // Determine if this was a cancellation (ResultCode 1032) or other failure
+                    $templateType = ($resultCode == 1032) ? 'payment_cancelled' : 'payment_failed';
+                    
+                    // Get random template from database
+                    $template = $storage->getRandomSmsTemplate($templateType);
+                    
+                    if ($template && !empty($template['template_text'])) {
+                        // Replace placeholders with actual values
+                        $smsMessage = str_replace(
+                            ['{amount}', '{reference}'],
+                            [$amount, $reference],
+                            $template['template_text']
+                        );
+                        error_log("[CALLBACK DEBUG] Using {$templateType} template ID {$template['id']}");
+                    } else {
+                        // Fallback messages
+                        if ($resultCode == 1032) {
+                            $smsMessage = "Payment cancelled. No charges made.\nGet back in the game! Dial *855*22# to try again.";
+                        } else {
+                            $smsMessage = "Payment of Ksh {$amount} failed.\nDon't miss out! Dial *855*22# to retry now.";
+                        }
+                        error_log("[CALLBACK DEBUG] No {$templateType} template found, using fallback message");
+                    }
+                    
+                    $smsResult = $onfonSms->send($phoneNumber, $smsMessage);
+                    if ($smsResult['status'] === 'success') {
+                        error_log("Onfon autoresponse SMS sent successfully to {$phoneNumber} for {$templateType}");
+                    } else {
+                        error_log("Onfon autoresponse SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
                     }
                 }
             }

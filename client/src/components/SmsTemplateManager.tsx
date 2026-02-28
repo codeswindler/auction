@@ -13,11 +13,11 @@ import { MessageSquare, Plus, Edit, Trash2, Check, X, AlertCircle } from "lucide
 import { api } from "@shared/routes";
 
 const TRANSACTION_TYPES = [
-  { value: 'bid_fee', label: 'Bid Fee' },
-  { value: 'bid', label: 'Bid' },
-  { value: 'payment_failed', label: 'Payment Failed' },
-  { value: 'payment_cancelled', label: 'Payment Cancelled' },
-  { value: 'other', label: 'Other' },
+  { value: 'bid_fee', label: 'Bid Fee', description: 'Sent when bid fee payment succeeds', used: true },
+  { value: 'bid', label: 'Bid', description: 'Sent when main bid payment succeeds', used: true },
+  { value: 'payment_failed', label: 'Payment Failed', description: 'Sent when payment fails (except cancellation)', used: true },
+  { value: 'payment_cancelled', label: 'Payment Cancelled', description: 'Sent when user cancels STK push (ResultCode 1032)', used: true },
+  { value: 'other', label: 'Other', description: 'Fallback for other successful payments', used: true },
 ] as const;
 
 type TransactionType = typeof TRANSACTION_TYPES[number]['value'];
@@ -358,7 +358,7 @@ export function SmsTemplateManager() {
       <Tabs value={selectedType} onValueChange={(value) => setSelectedType(value as TransactionType)}>
         <TabsList className="grid w-full grid-cols-5">
           {TRANSACTION_TYPES.map(type => (
-            <TabsTrigger key={type.value} value={type.value}>
+            <TabsTrigger key={type.value} value={type.value} title={type.description}>
               {type.label}
             </TabsTrigger>
           ))}
@@ -370,6 +370,9 @@ export function SmsTemplateManager() {
               <div>
                 <h3 className="font-semibold">{getTypeLabel(type.value)} Templates</h3>
                 <p className="text-sm text-muted-foreground">
+                  {TRANSACTION_TYPES.find(t => t.value === type.value)?.description}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
                   {activeTemplates.length} active, {inactiveTemplates.length} inactive
                 </p>
               </div>
