@@ -171,27 +171,39 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     
     // Get or create user    
     // Get or create user
-    $user = $storage->getUserByPhoneNumber($msisdn);
-    $isNewUser = false;
-    if (!$user) {
-        $user = $storage->createUser([
-            'phoneNumber' => $msisdn,
-            'balance' => '0',
-            'loanLimit' => '25100',
-            'hasActiveLoan' => false
-        ]);
-        $isNewUser = true;
+    try {
+        $user = $storage->getUserByPhoneNumber($msisdn);
+        $isNewUser = false;
+        if (!$user) {
+            $user = $storage->createUser([
+                'phoneNumber' => $msisdn,
+                'balance' => '0',
+                'loanLimit' => '25100',
+                'hasActiveLoan' => false
+            ]);
+            $isNewUser = true;
+        }
+    } catch (Exception $e) {
+        error_log("[USSD ERROR] Failed to get/create user for {$msisdn}: " . $e->getMessage());
+        error_log("[USSD ERROR] Stack trace: " . $e->getTraceAsString());
+        return "END System error. Please try again later.";
     }
     
     // Check if this is first time dialing (no previous transactions)
     $isFirstDial = false;
-    if (!$isNewUser) {
-        $stmt = $pdo->prepare("SELECT COUNT(*) as tx_count FROM transactions WHERE user_id = ?");
-        $stmt->execute([$user['id']]);
-        $txCount = $stmt->fetch()['tx_count'] ?? 0;
-        $isFirstDial = ($txCount == 0);
-    } else {
-        $isFirstDial = true;
+    try {
+        if (!$isNewUser) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) as tx_count FROM transactions WHERE user_id = ?");
+            $stmt->execute([$user['id']]);
+            $txCount = $stmt->fetch()['tx_count'] ?? 0;
+            $isFirstDial = ($txCount == 0);
+        } else {
+            $isFirstDial = true;
+        }
+    } catch (Exception $e) {
+        error_log("[USSD ERROR] Failed to check transaction count for user {$user['id']}: " . $e->getMessage());
+        // Default to not first dial to avoid sending duplicate welcome SMS
+        $isFirstDial = false;
     }
     
     // Send welcome SMS on first dial (only at root menu, not on subsequent interactions)
@@ -221,12 +233,23 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         return "END Our USSD service is temporarily unavailable.\n\nPlease visit:\njengacapital.co.ke/cash\n\nThank you for your understanding.";
     }
     
-    $activeCampaign = $storage->getActiveCampaign();
-    if (empty($activeCampaign)) {
-        return "END No active campaign available. Please try again later.";
+    try {
+        $activeCampaign = $storage->getActiveCampaign();
+        if (empty($activeCampaign)) {
+            error_log("[USSD ERROR] No active campaign found for phone {$msisdn}");
+            return "END No active campaign available. Please try again later.";
+        }
+    } catch (Exception $e) {
+        error_log("[USSD ERROR] Failed to get active campaign for phone {$msisdn}: " . $e->getMessage());
+        return "END System error. Please try again later.";
     }
 
-    $allNodes = $storage->listCampaignNodes($activeCampaign['id'], false);
+    try {
+        $allNodes = $storage->listCampaignNodes($activeCampaign['id'], false);
+    } catch (Exception $e) {
+        error_log("[USSD ERROR] Failed to list campaign nodes for campaign {$activeCampaign['id']}: " . $e->getMessage());
+        return "END System error. Please try again later.";
+    }
     $nodesByParent = [];
     foreach ($allNodes as $node) {
         $parentKey = $node['parent_id'] ?? null;

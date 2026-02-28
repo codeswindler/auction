@@ -25,6 +25,14 @@ try {
     if (empty($msisdn) || empty($sessionId) || empty($ussdCode)) {
         error_log("[USSD ERROR] Missing required parameters - MSISDN: " . ($msisdn ?: 'empty') . ", SESSIONID: " . ($sessionId ?: 'empty') . ", USSDCODE: " . ($ussdCode ?: 'empty'));
         textResponse("END Invalid request parameters.");
+        return;
+    }
+    
+    // Validate phone number format
+    if (!preg_match('/^254[0-9]{9}$/', $msisdn)) {
+        error_log("[USSD ERROR] Invalid phone number format: {$msisdn}");
+        textResponse("END Invalid phone number format.");
+        return;
     }
 
     // Debounce duplicate gateway retries for the same session/input within a short window.
@@ -68,6 +76,8 @@ try {
     textResponse($response);
     
 } catch (Exception $e) {
-    error_log("[USSD EXCEPTION] SessionID: " . ($sessionId ?? 'unknown') . " | Error: " . $e->getMessage());
+    $msisdn = $_GET['MSISDN'] ?? $_POST['MSISDN'] ?? 'unknown';
+    error_log("[USSD EXCEPTION] SessionID: " . ($sessionId ?? 'unknown') . " | Phone: {$msisdn} | Error: " . $e->getMessage());
+    error_log("[USSD EXCEPTION] Stack trace: " . $e->getTraceAsString());
     textResponse("END System error. Please try again later.");
 }
