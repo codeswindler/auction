@@ -541,5 +541,159 @@ if ($method === 'DELETE' && preg_match('#/api/admin/admins/(\d+)#', $path, $matc
     }
 }
 
+// SMS Template Management Endpoints
+
+// GET /api/admin/sms-templates - List all SMS templates
+if ($method === 'GET' && preg_match('#/api/admin/sms-templates$#', $path)) {
+    try {
+        $transactionType = $_GET['transaction_type'] ?? null;
+        $templates = $storage->getAllSmsTemplates($transactionType);
+        $result = array_map(function($t) {
+            return [
+                'id' => (int)$t['id'],
+                'transactionType' => $t['transaction_type'],
+                'templateText' => $t['template_text'],
+                'isActive' => (bool)$t['is_active'],
+                'displayOrder' => (int)$t['display_order'],
+                'createdAt' => $t['created_at'],
+                'updatedAt' => $t['updated_at'],
+            ];
+        }, $templates);
+        jsonResponse($result);
+    } catch (Exception $e) {
+        error_log("SMS templates list error: " . $e->getMessage());
+        jsonResponse(['error' => 'Error fetching SMS templates'], 500);
+    }
+}
+
+// GET /api/admin/sms-templates/:id - Get single template
+if ($method === 'GET' && preg_match('#/api/admin/sms-templates/(\d+)#', $path, $matches)) {
+    try {
+        $id = (int)$matches[1];
+        $template = $storage->getSmsTemplateById($id);
+        if (!$template) {
+            jsonResponse(['error' => 'Template not found'], 404);
+        }
+        jsonResponse([
+            'id' => (int)$template['id'],
+            'transactionType' => $template['transaction_type'],
+            'templateText' => $template['template_text'],
+            'isActive' => (bool)$template['is_active'],
+            'displayOrder' => (int)$template['display_order'],
+            'createdAt' => $template['created_at'],
+            'updatedAt' => $template['updated_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("SMS template get error: " . $e->getMessage());
+        jsonResponse(['error' => 'Error fetching template'], 500);
+    }
+}
+
+// POST /api/admin/sms-templates - Create new template
+if ($method === 'POST' && preg_match('#/api/admin/sms-templates$#', $path)) {
+    try {
+        $json = file_get_contents('php://input');
+        $data = json_decode($json, true);
+        
+        if (!isset($data['transaction_type']) || !isset($data['template_text'])) {
+            jsonResponse(['error' => 'transaction_type and template_text are required'], 400);
+        }
+        
+        $template = $storage->createSmsTemplate([
+            'transaction_type' => $data['transaction_type'],
+            'template_text' => $data['template_text'],
+            'is_active' => $data['is_active'] ?? true,
+            'display_order' => $data['display_order'] ?? 0,
+        ]);
+        
+        jsonResponse([
+            'id' => (int)$template['id'],
+            'transactionType' => $template['transaction_type'],
+            'templateText' => $template['template_text'],
+            'isActive' => (bool)$template['is_active'],
+            'displayOrder' => (int)$template['display_order'],
+            'createdAt' => $template['created_at'],
+            'updatedAt' => $template['updated_at'],
+        ], 201);
+    } catch (Exception $e) {
+        error_log("SMS template create error: " . $e->getMessage());
+        $errorMsg = $e->getMessage();
+        if (strpos($errorMsg, 'Maximum 5 active templates') !== false) {
+            jsonResponse(['error' => $errorMsg], 400);
+        } else {
+            jsonResponse(['error' => 'Error creating template'], 500);
+        }
+    }
+}
+
+// PUT /api/admin/sms-templates/:id - Update template
+if ($method === 'PUT' && preg_match('#/api/admin/sms-templates/(\d+)#', $path, $matches)) {
+    try {
+        $id = (int)$matches[1];
+        $json = file_get_contents('php://input');
+        $data = json_decode($json, true);
+        
+        $updateData = [];
+        if (isset($data['transaction_type'])) {
+            $updateData['transaction_type'] = $data['transaction_type'];
+        }
+        if (isset($data['template_text'])) {
+            $updateData['template_text'] = $data['template_text'];
+        }
+        if (isset($data['is_active'])) {
+            $updateData['is_active'] = $data['is_active'];
+        }
+        if (isset($data['display_order'])) {
+            $updateData['display_order'] = $data['display_order'];
+        }
+        
+        if (empty($updateData)) {
+            jsonResponse(['error' => 'No fields to update'], 400);
+        }
+        
+        $storage->updateSmsTemplate($id, $updateData);
+        $template = $storage->getSmsTemplateById($id);
+        
+        if (!$template) {
+            jsonResponse(['error' => 'Template not found'], 404);
+        }
+        
+        jsonResponse([
+            'id' => (int)$template['id'],
+            'transactionType' => $template['transaction_type'],
+            'templateText' => $template['template_text'],
+            'isActive' => (bool)$template['is_active'],
+            'displayOrder' => (int)$template['display_order'],
+            'createdAt' => $template['created_at'],
+            'updatedAt' => $template['updated_at'],
+        ]);
+    } catch (Exception $e) {
+        error_log("SMS template update error: " . $e->getMessage());
+        $errorMsg = $e->getMessage();
+        if (strpos($errorMsg, 'Maximum 5 active templates') !== false) {
+            jsonResponse(['error' => $errorMsg], 400);
+        } else {
+            jsonResponse(['error' => 'Error updating template'], 500);
+        }
+    }
+}
+
+// DELETE /api/admin/sms-templates/:id - Delete template
+if ($method === 'DELETE' && preg_match('#/api/admin/sms-templates/(\d+)#', $path, $matches)) {
+    try {
+        $id = (int)$matches[1];
+        $template = $storage->getSmsTemplateById($id);
+        if (!$template) {
+            jsonResponse(['error' => 'Template not found'], 404);
+        }
+        
+        $storage->deleteSmsTemplate($id);
+        jsonResponse(['success' => true, 'message' => 'Template deleted successfully']);
+    } catch (Exception $e) {
+        error_log("SMS template delete error: " . $e->getMessage());
+        jsonResponse(['error' => 'Error deleting template'], 500);
+    }
+}
+
 jsonResponse(['error' => 'Not found'], 404);
 

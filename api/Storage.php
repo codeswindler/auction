@@ -501,5 +501,126 @@ class Storage {
         $stmt = $this->pdo->prepare($query);
         return $stmt->execute($params);
     }
+    
+    // SMS Template Methods
+    public function getAllSmsTemplates($transactionType = null) {
+        $query = "SELECT * FROM sms_templates WHERE 1=1";
+        $params = [];
+        
+        if ($transactionType) {
+            $query .= " AND transaction_type = ?";
+            $params[] = $transactionType;
+        }
+        
+        $query .= " ORDER BY transaction_type, display_order, id";
+        
+        $stmt = $this->pdo->prepare($query);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+    
+    public function getActiveSmsTemplates($transactionType) {
+        $stmt = $this->pdo->prepare("
+            SELECT * FROM sms_templates 
+            WHERE transaction_type = ? AND is_active = 1 
+            ORDER BY display_order, id 
+            LIMIT 5
+        ");
+        $stmt->execute([$transactionType]);
+        return $stmt->fetchAll();
+    }
+    
+    public function getSmsTemplateById($id) {
+        $stmt = $this->pdo->prepare("SELECT * FROM sms_templates WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch();
+    }
+    
+    public function createSmsTemplate($data) {
+        // Check active count for this transaction type (max 5)
+        $activeCount = $this->pdo->prepare("
+            SELECT COUNT(*) FROM sms_templates 
+            WHERE transaction_type = ? AND is_active = 1
+        ");
+        $activeCount->execute([$data['transaction_type']]);
+        $count = $activeCount->fetchColumn();
+        
+        if ($count >= 5 && ($data['is_active'] ?? true)) {
+            throw new Exception("Maximum 5 active templates allowed per transaction type");
+        }
+        
+        $stmt = $this->pdo->prepare("
+            INSERT INTO sms_templates (transaction_type, template_text, is_active, display_order)
+            VALUES (?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $data['transaction_type'],
+            $data['template_text'],
+            $data['is_active'] ?? true ? 1 : 0,
+            $data['display_order'] ?? 0
+        ]);
+        return $this->getSmsTemplateById($this->pdo->lastInsertId());
+    }
+    
+    public function updateSmsTemplate($id, $data) {
+        // If activating, check active count
+        if (isset($data['is_active']) && $data['is_active']) {
+            $template = $this->getSmsTemplateById($id);
+            if ($template) {
+                $activeCount = $this->pdo->prepare("
+                    SELECT COUNT(*) FROM sms_templates 
+                    WHERE transaction_type = ? AND is_active = 1 AND id != ?
+                ");
+                $activeCount->execute([$template['transaction_type'], $id]);
+                $count = $activeCount->fetchColumn();
+                
+                if ($count >= 5) {
+                    throw new Exception("Maximum 5 active templates allowed per transaction type");
+                }
+            }
+        }
+        
+        $fields = [];
+        $params = [];
+        
+        if (isset($data['transaction_type'])) {
+            $fields[] = "transaction_type = ?";
+            $params[] = $data['transaction_type'];
+        }
+        if (isset($data['template_text'])) {
+            $fields[] = "template_text = ?";
+            $params[] = $data['template_text'];
+        }
+        if (isset($data['is_active'])) {
+            $fields[] = "is_active = ?";
+            $params[] = $data['is_active'] ? 1 : 0;
+        }
+        if (isset($data['display_order'])) {
+            $fields[] = "display_order = ?";
+            $params[] = $data['display_order'];
+        }
+        
+        if (empty($fields)) {
+            return false;
+        }
+        
+        $params[] = $id;
+        $query = "UPDATE sms_templates SET " . implode(", ", $fields) . " WHERE id = ?";
+        $stmt = $this->pdo->prepare($query);
+        return $stmt->execute($params);
+    }
+    
+    public function deleteSmsTemplate($id) {
+        $stmt = $this->pdo->prepare("DELETE FROM sms_templates WHERE id = ?");
+        return $stmt->execute([$id]);
+    }
+    
+    public function getRandomSmsTemplate($transactionType) {
+        $templates = $this->getActiveSmsTemplates($transactionType);
+        if (empty($templates)) {
+            return null;
+        }
+        return $templates[array_rand($templates)];
+    }
 }
 

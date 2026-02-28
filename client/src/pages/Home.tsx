@@ -1,5 +1,6 @@
 import { PhoneSimulator } from "@/components/PhoneSimulator";
 import { CampaignManager } from "@/components/CampaignManager";
+import { SmsTemplateManager } from "@/components/SmsTemplateManager";
 import { LoginGate } from "@/components/LoginGate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -186,8 +187,9 @@ export default function Home() {
       </main>
 
       {showMenuModular && (
-        <section className="w-full max-w-7xl mx-auto px-6 md:px-12 pb-12">
+        <section className="w-full max-w-7xl mx-auto px-6 md:px-12 pb-12 space-y-8">
           <CampaignManager />
+          <SmsTemplateManager />
         </section>
       )}
 
