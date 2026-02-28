@@ -146,25 +146,24 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     // Get or create session
     $session = $storage->getOrCreateSession($sessionId, $msisdn, $ussdCode);
     
-    // Fix: If INPUT is just a plain number (like "22" from *855*22#) and this is the first interaction
-    // (empty input_history), treat it as the initial dial to show the root menu
-    // BUT: If INPUT contains * (like "22*3"), it's a selection, so parse it normally
-    $isPlainNumber = preg_match('/^[0-9]+$/', $input) === 1 && strpos($input, '*') === false && strpos($input, '#') === false;
+    // Parse the input to extract user selections
+    // Gateway suffixes like "55", "22", "63", "65" are stripped, leaving only user selections
+    $parsed = parseUSSDInput($input);
+    $parts = $parsed['parts'];
+    $lastInput = $parsed['lastInput'];
+    $level = count($parts);
+    
+    // Special case: If input is just a gateway suffix (like "55" or "22") with no selections,
+    // and this is the first interaction, show root menu
+    $isPlainGatewaySuffix = preg_match('/^(55|22|63|65)$/', $input) === 1;
     $isFirstInteraction = empty($session['input_history']) || $session['input_history'] === '';
     
-    if ($isFirstInteraction && $isPlainNumber) {
-        // This is the first dial with a plain number (no selections) - ignore it and show root menu
-        error_log("[USSD FIX] First dial detected with plain number input: '$input' - treating as initial dial (empty input_history)");
-        $parsed = ['parts' => [], 'lastInput' => ''];
+    if ($isFirstInteraction && $isPlainGatewaySuffix && empty($parts)) {
+        // First dial with just gateway suffix - show root menu
+        error_log("[USSD FIX] First dial detected with gateway suffix only: '$input' - showing root menu");
         $parts = [];
         $lastInput = '';
         $level = 0;
-    } else {
-        // Normal parsing - includes selections like "22*3" or "3"
-        $parsed = parseUSSDInput($input);
-        $parts = $parsed['parts'];
-        $lastInput = $parsed['lastInput'];
-        $level = count($parts);
     }
 
     // Log USSD session step details with full debugging info
