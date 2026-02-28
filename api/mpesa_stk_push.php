@@ -20,7 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     stkUserError('Method not allowed', 405);
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
+$rawInput = file_get_contents('php://input');
+$input = json_decode($rawInput, true);
+
+// Log the incoming request
+$stkLogFile = '/var/log/stk_push.log';
+$logMessage = "[STK PUSH ENDPOINT] Received request: " . substr($rawInput, 0, 200);
+error_log($logMessage);
+@file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMessage . "\n", FILE_APPEND);
 
 // Validate required fields
 $transactionId = $input['transactionId'] ?? null;
@@ -28,6 +35,9 @@ $phoneNumber = $input['phoneNumber'] ?? null;
 $amount = $input['amount'] ?? null;
 
 if (!$transactionId || !$phoneNumber || !$amount) {
+    $errorMsg = "[STK PUSH ENDPOINT] Missing required fields - TX: " . ($transactionId ?: 'null') . ", Phone: " . ($phoneNumber ?: 'null') . ", Amount: " . ($amount ?: 'null');
+    error_log($errorMsg);
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $errorMsg . "\n", FILE_APPEND);
     stkUserError('Missing required fields: transactionId, phoneNumber, amount', 400);
 }
 
@@ -138,7 +148,9 @@ $stkPushData = [
 ];
 
 // Log STK push request details for debugging
-error_log("STK Push Request: Transaction ID {$transactionId}, Phone: {$phoneNumber}, Amount: {$amount}, MerchantRequestID: {$merchantRequestID}");
+$logMsg = "STK Push Request: Transaction ID {$transactionId}, Phone: {$phoneNumber}, Amount: {$amount}, MerchantRequestID: {$merchantRequestID}";
+error_log($logMsg);
+@file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
 
 $ch = curl_init($stkPushUrl);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -156,7 +168,9 @@ curl_close($ch);
 $stkData = json_decode($stkResponse, true);
 
 // Log full M-Pesa response for debugging
-error_log("M-Pesa STK Push Response: " . json_encode($stkData));
+$logMsg = "M-Pesa STK Push Response: " . json_encode($stkData);
+error_log($logMsg);
+@file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
 
 if ($stkHttpCode === 200 && isset($stkData['ResponseCode']) && $stkData['ResponseCode'] == '0') {
     // M-Pesa returns CheckoutRequestID in the response - this is what will be in callbacks
