@@ -197,18 +197,22 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     $logCacheFile = sys_get_temp_dir() . '/ussd_log_cache_' . md5($sessionId . $input);
     $cacheTimeout = 2; // 2 seconds cache
     
+    $ussdLogFile = '/var/log/ussd_debug.log';
+    
     if (!file_exists($logCacheFile) || (time() - filemtime($logCacheFile)) > $cacheTimeout) {
-    error_log(sprintf(
-        "[USSD STEP] SessionID: %s | Phone: %s | RawInput: %s | ParsedParts: [%s] | Level: %d | LastInput: %s | Parts[0]: %s | CurrentMenu: %s",
-        $sessionId,
-        $msisdn,
-        $input,
-        implode('*', $parts),
-        $level,
-        $lastInput ?: 'none',
-        $parts[0] ?? 'empty',
-        $session['current_menu'] ?? 'unknown'
-    ));
+        $logMessage = sprintf(
+            "[USSD STEP] SessionID: %s | Phone: %s | RawInput: %s | ParsedParts: [%s] | Level: %d | LastInput: %s | Parts[0]: %s | CurrentMenu: %s",
+            $sessionId,
+            $msisdn,
+            $input,
+            implode('*', $parts),
+            $level,
+            $lastInput ?: 'none',
+            $parts[0] ?? 'empty',
+            $session['current_menu'] ?? 'unknown'
+        );
+        error_log($logMessage);
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $logMessage . "\n", FILE_APPEND);
         // Create cache file to prevent duplicate logging
         touch($logCacheFile);
     }
@@ -354,10 +358,14 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     $currentParentId = null;
     $currentNode = null;
     foreach ($parts as $partIndex => $part) {
+        $ussdLogFile = '/var/log/ussd_debug.log';
+        
         if (!isValidNumeric($part)) {
             $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $getChildren($currentParentId));
             $storage->updateSession($sessionId, 'campaign_menu_invalid', $input);
-            error_log("[USSD MENU ERROR] Invalid non-numeric selection at part {$partIndex}: '{$part}' | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null'));
+            $errorLog = "[USSD MENU ERROR] Phone: {$msisdn} | Session: {$sessionId} | Invalid non-numeric selection at part {$partIndex}: '{$part}' | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null');
+            error_log($errorLog);
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $errorLog . "\n", FILE_APPEND);
             return "CON Invalid selection. Please try again.\n" . $menu;
         }
 
@@ -368,26 +376,46 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         if ($selection < 1 || $selection > $siblingCount) {
             $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $siblings);
             $storage->updateSession($sessionId, 'campaign_menu_invalid', $input);
-            error_log("[USSD MENU ERROR] Selection out of range: {$selection} (valid: 1-{$siblingCount}) | Part index: {$partIndex} | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null') . " | Available siblings: " . json_encode(array_map(function($s) { return $s['id'] . ':' . $s['label']; }, $siblings)));
+            $errorLog = "[USSD MENU ERROR] Phone: {$msisdn} | Session: {$sessionId} | Selection out of range: {$selection} (valid: 1-{$siblingCount}) | Part index: {$partIndex} | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null') . " | Available siblings: " . json_encode(array_map(function($s) { return $s['id'] . ':' . $s['label']; }, $siblings));
+            error_log($errorLog);
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $errorLog . "\n", FILE_APPEND);
             return "CON Invalid selection. Please try again.\n" . $menu;
         }
 
         $currentNode = $siblings[$selection - 1];
         $currentParentId = $currentNode['id'];
         
-        // Log navigation for debugging
-        error_log("[USSD NAV] Part {$partIndex}: Selected {$selection} -> Node ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}");
+        // Log navigation for debugging with full context
+        $ussdLogFile = '/var/log/ussd_debug.log';
+        $navLog = "[USSD NAV] Phone: {$msisdn} | Session: {$sessionId} | Part {$partIndex}: Selected {$selection} -> Node ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']} | Full Input: {$input}";
+        error_log($navLog);
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $navLog . "\n", FILE_APPEND);
     }
 
     $children = $getChildren($currentParentId);
     $prompt = $currentNode ? ($currentNode['prompt'] ?? $activeCampaign['root_prompt']) : $activeCampaign['root_prompt'];
     $menuBody = $buildMenu($prompt, $children);
 
-    // Debug logging
+    // Debug logging with full context
+    $ussdLogFile = '/var/log/ussd_debug.log';
     if ($currentNode) {
-        error_log("[USSD DEBUG] Current node: ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}, ChildrenCount=" . count($children));
+        $nodeLog = "[USSD MENU] Current node: ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}, ChildrenCount=" . count($children) . " | Phone: {$msisdn} | Session: {$sessionId} | Input: {$input}";
+        error_log($nodeLog);
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $nodeLog . "\n", FILE_APPEND);
     } else {
-        error_log("[USSD DEBUG] Current node: null (root menu), ChildrenCount=" . count($children));
+        $rootLog = "[USSD MENU] Current node: null (root menu), ChildrenCount=" . count($children) . " | Phone: {$msisdn} | Session: {$sessionId} | Input: {$input}";
+        error_log($rootLog);
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $rootLog . "\n", FILE_APPEND);
+    }
+    
+    // Log available menu options
+    if (count($children) > 0) {
+        $menuOptions = [];
+        foreach ($children as $idx => $child) {
+            $menuOptions[] = ($idx + 1) . ". " . ($child['label'] ?? 'Unknown');
+        }
+        $menuLog = "[USSD MENU OPTIONS] Phone: {$msisdn} | Available: " . implode(', ', $menuOptions);
+        @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $menuLog . "\n", FILE_APPEND);
     }
 
     if (count($children) > 0) {
@@ -516,16 +544,33 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         $response = "CON System error. Please try again.\n" . $menuBody;
     }
     
-    // Log the response being sent
+    // Log the response being sent with full journey context
     $responseType = strpos($response, 'CON') === 0 ? 'CON' : 'END';
-    $responsePreview = substr(preg_replace('/\n/', ' ', $response), 0, 80);
-    error_log(sprintf(
-        "[USSD RESPONSE] SessionID: %s | Type: %s | Menu: %s | Preview: %s",
+    $responsePreview = substr(preg_replace('/\n/', ' ', $response), 0, 150);
+    
+    $journeyLog = sprintf(
+        "[USSD JOURNEY] SessionID: %s | Phone: %s | Input: %s | Level: %d | Selections: [%s] | Response: %s | Menu: %s | Preview: %s",
         $sessionId,
+        $msisdn,
+        $input,
+        $level,
+        implode('*', $parts),
         $responseType,
         $session['current_menu'] ?? 'unknown',
         $responsePreview
-    ));
+    );
+    
+    error_log($journeyLog);
+    @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $journeyLog . "\n", FILE_APPEND);
+    
+    // Also log the full response for debugging
+    $fullResponseLog = sprintf(
+        "[USSD RESPONSE FULL] SessionID: %s | Phone: %s | Full Response:\n%s",
+        $sessionId,
+        $msisdn,
+        $response
+    );
+    @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $fullResponseLog . "\n", FILE_APPEND);
     
     return $response;
 }
