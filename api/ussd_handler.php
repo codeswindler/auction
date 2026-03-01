@@ -125,16 +125,42 @@ function triggerSTKPush($transactionId, $phoneNumber, $amount) {
         return false;
     }
     
-    // Log the response
-    $responseMsg = "[STK PUSH] Response for transaction {$transactionId}: HTTP {$httpCode} - " . substr($response, 0, 200);
+    // Log the full response for debugging
+    $responseMsg = "[STK PUSH] Response for transaction {$transactionId}: HTTP {$httpCode}";
     error_log($responseMsg);
     @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $responseMsg . "\n", FILE_APPEND);
     
-    if ($httpCode >= 200 && $httpCode < 300) {
+    // Try to parse response to get error details
+    $responseData = json_decode($response, true);
+    if ($responseData) {
+        $errorDetails = "[STK PUSH] Full response: " . json_encode($responseData);
+        error_log($errorDetails);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $errorDetails . "\n", FILE_APPEND);
+        
+        if (isset($responseData['error'])) {
+            $errorMsg = "[STK PUSH ERROR] Error from endpoint: " . $responseData['error'];
+            if (isset($responseData['details'])) {
+                $errorMsg .= " | Details: " . json_encode($responseData['details']);
+            }
+            error_log($errorMsg);
+            @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $errorMsg . "\n", FILE_APPEND);
+        }
+    } else {
+        // Log raw response if not JSON
+        $rawResponse = "[STK PUSH] Raw response: " . substr($response, 0, 500);
+        error_log($rawResponse);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $rawResponse . "\n", FILE_APPEND);
+    }
+    
+    if ($httpCode >= 200 && $httpCode < 300 && $responseData && !isset($responseData['error'])) {
         return true;
     } else {
-        error_log("[STK PUSH ERROR] HTTP {$httpCode} response for transaction {$transactionId}");
-        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . " - [STK PUSH ERROR] HTTP {$httpCode} response\n", FILE_APPEND);
+        $errorSummary = "[STK PUSH ERROR] HTTP {$httpCode} response for transaction {$transactionId}";
+        if ($responseData && isset($responseData['error'])) {
+            $errorSummary .= " - " . $responseData['error'];
+        }
+        error_log($errorSummary);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $errorSummary . "\n", FILE_APPEND);
         return false;
     }
 }
