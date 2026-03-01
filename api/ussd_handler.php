@@ -373,6 +373,18 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         $siblings = $getChildren($currentParentId);
         $siblingCount = count($siblings);
         
+        // Handle pagination: 98 is "MORE" option added by gateway
+        // If user selects 98, show the same menu (no pagination implemented yet)
+        if ($selection === 98) {
+            $paginationLog = "[USSD PAGINATION] Phone: {$msisdn} | Session: {$sessionId} | User selected 98 (MORE) | Total items: {$siblingCount} | Showing same menu";
+            error_log($paginationLog);
+            @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $paginationLog . "\n", FILE_APPEND);
+            // Show the same menu - pagination not implemented, so just refresh
+            $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $siblings);
+            $storage->updateSession($sessionId, 'campaign_menu:' . $activeCampaign['id'] . ':' . ($currentParentId ?? 'root'), $input);
+            return "CON " . $menu;
+        }
+        
         if ($selection < 1 || $selection > $siblingCount) {
             $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $siblings);
             $storage->updateSession($sessionId, 'campaign_menu_invalid', $input);
