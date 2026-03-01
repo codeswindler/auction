@@ -545,6 +545,10 @@ export default function Admin() {
     }
   }, []);
 
+  // Track last seen transaction IDs to detect new payments
+  const [lastSeenTxIds, setLastSeenTxIds] = useState<Set<number>>(new Set());
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   // Fetch filtered transactions for table display (with pagination limit)
   const { data: transactions = [], isLoading: txLoading, error: txError } = useQuery({
     queryKey: [api.admin.transactions.list.path, statusFilter, feeFilter, sourceFilter, phoneNumberFilter, dateFrom, dateTo, page],
@@ -570,13 +574,72 @@ export default function Admin() {
         return [];
       }
     },
-    staleTime: 30000, // Cache for 30 seconds to reduce refetches
+    staleTime: 5000, // Cache for 5 seconds (reduced for real-time updates)
     gcTime: 300000, // Keep in cache for 5 minutes
+    refetchInterval: 8000, // Auto-refresh every 8 seconds
+    refetchIntervalInBackground: true, // Continue polling even when tab is in background
   });
 
   // Ensure transactions are arrays
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeAllTransactions = Array.isArray(allTransactions) ? allTransactions : []; // All transactions for analytics
+
+  // Helper function to get display name for a transaction
+  // Get bid selection name - for fees, backend returns parent's payment_name, for bids use own payment_name
+  const getDisplayName = (tx: any) => {
+    try {
+      // If paymentName exists, use it (backend already includes parent's payment_name for fees)
+      if (tx?.paymentName && tx.paymentName.trim() !== '') {
+        return tx.paymentName;
+      }
+      // For old data without paymentName, show blank instead of N/A
+      return '';
+    } catch (error) {
+      console.error('Error getting display name:', error);
+      return '';
+    }
+  };
+
+  // Detect new paid transactions and show toast notifications
+  useEffect(() => {
+    if (isInitialLoad) {
+      // On initial load, just track existing transaction IDs
+      const currentIds = new Set(safeTransactions.map((tx: any) => tx?.id).filter(Boolean));
+      setLastSeenTxIds(currentIds);
+      setIsInitialLoad(false);
+      return;
+    }
+
+    // Find new paid transactions that weren't in the last seen set
+    const newPaidTransactions = safeTransactions.filter((tx: any) => {
+      if (!tx?.id) return false;
+      const isNew = !lastSeenTxIds.has(tx.id);
+      const isPaid = tx.paymentStatus === 'paid' || tx.status === 'completed';
+      return isNew && isPaid;
+    });
+
+    // Show toast for each new paid transaction
+    if (newPaidTransactions.length > 0) {
+      newPaidTransactions.forEach((tx: any) => {
+        const displayName = getDisplayName(tx);
+        const amount = parseFloat(tx.amount || 0).toLocaleString();
+        const phone = tx.phoneNumber || 'Unknown';
+        
+        toast({
+          title: "💰 New Payment Received!",
+          description: `${displayName || 'Bid Fee'} - KES ${amount} from ${phone}`,
+          duration: 5000,
+        });
+      });
+    }
+
+    // Update last seen transaction IDs
+    if (safeTransactions.length > 0) {
+      const currentIds = new Set(safeTransactions.map((tx: any) => tx?.id).filter(Boolean));
+      setLastSeenTxIds(currentIds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeTransactions, isInitialLoad]);
 
   // Fetch full filtered transactions for export/count (no client-side limiting)
   const { data: exportTransactions = [], isLoading: exportLoading } = useQuery({
@@ -601,22 +664,6 @@ export default function Admin() {
   });
 
   const exportCount = Array.isArray(exportTransactions) ? exportTransactions.length : 0;
-
-  // Helper function to get display name for a transaction
-  // Get bid selection name - for fees, backend returns parent's payment_name, for bids use own payment_name
-  const getDisplayName = (tx: any) => {
-    try {
-      // If paymentName exists, use it (backend already includes parent's payment_name for fees)
-      if (tx?.paymentName && tx.paymentName.trim() !== '') {
-        return tx.paymentName;
-      }
-      // For old data without paymentName, show blank instead of N/A
-      return '';
-    } catch (error) {
-      console.error('Error getting display name:', error);
-      return '';
-    }
-  };
 
   const totalTransactions = safeAllTransactions.length;
   const fallbackCampaign = safeCampaigns
