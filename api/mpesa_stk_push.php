@@ -172,6 +172,29 @@ $logMsg = "M-Pesa STK Push Response: " . json_encode($stkData);
 error_log($logMsg);
 @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
 
+// Check for M-Pesa error codes (different format than success response)
+if (isset($stkData['errorCode'])) {
+    $errorCode = $stkData['errorCode'];
+    $errorMessage = $stkData['errorMessage'] ?? 'No error message provided';
+    $errorDetails = "M-Pesa Error Code: {$errorCode}, Message: {$errorMessage}";
+    error_log("[STK PUSH ERROR] {$errorDetails}");
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . " - [STK PUSH ERROR] {$errorDetails}\n", FILE_APPEND);
+    
+    // Store detailed error in transaction
+    $storage->updateTransactionPayment($transactionId, [
+        'payment_status' => 'failed',
+        'payment_failure_reason' => "M-Pesa Error {$errorCode}: {$errorMessage}",
+    ]);
+    $stmt = $pdo->prepare("UPDATE transactions SET status = 'failed' WHERE id = ?");
+    $stmt->execute([$transactionId]);
+    
+    stkUserError('M-Pesa service temporarily unavailable. Please try again in a moment.', 500, [
+        'errorCode' => $errorCode,
+        'errorMessage' => $errorMessage,
+        'response' => $stkData
+    ]);
+}
+
 if ($stkHttpCode === 200 && isset($stkData['ResponseCode']) && $stkData['ResponseCode'] == '0') {
     // M-Pesa returns CheckoutRequestID in the response - this is what will be in callbacks
     // The response structure is: {"ResponseCode":"0","CustomerMessage":"...","CheckoutRequestID":"ws_CO_..."}
