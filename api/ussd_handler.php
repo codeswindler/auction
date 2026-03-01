@@ -308,28 +308,17 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     $buildMenu = function($prompt, $children) {
         $menuLines = [];
         foreach ($children as $index => $node) {
-            $label = $node['label'] ?? '';
-            // Truncate long labels to max 20 chars to save space
-            if (strlen($label) > 20) {
-                $label = substr($label, 0, 17) . '...';
-            }
-            $line = ($index + 1) . ". " . $label;
+            $line = ($index + 1) . ". " . ($node['label'] ?? '');
             if (($node['action_type'] ?? null) === 'bid' && !empty($node['action_payload'])) {
                 $payload = json_decode($node['action_payload'], true);
                 $amount = isset($payload['amount']) ? (float)$payload['amount'] : 0;
                 if ($amount > 0) {
-                    // Use compact format: "1. Label 25000" instead of "1. Label-KES 25,000"
-                    $line .= " " . number_format($amount, 0, '.', '');
+                    $line .= "-KES " . number_format($amount, 0, '.', ',');
                 }
             }
             $menuLines[] = $line;
         }
-        // Shorten prompt if it's too long
         $menuText = trim($prompt ?? '');
-        // Replace long prompts with shorter versions
-        $menuText = str_replace('Welcome Kwachua Bid! Ready to bid? Select one of below active auctions:', 'Select auction:', $menuText);
-        $menuText = str_replace('Select one of below active auctions:', 'Select auction:', $menuText);
-        
         if (!empty($menuLines)) {
             $menuText = trim($menuText . "\n" . implode("\n", $menuLines));
         }
