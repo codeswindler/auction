@@ -225,12 +225,18 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
     }
     
     // Send welcome SMS on first dial (only at root menu, not on subsequent interactions)
-    if ($isFirstDial && $level == 0 && empty($parts)) {
+    // Conditions:
+    // 1. User is first-time (0 transactions)
+    // 2. At root menu (level 0, no selections)
+    // 3. This is truly the first interaction (empty input_history in session)
+    $isTrulyFirstInteraction = empty($session['input_history']) || $session['input_history'] === '';
+    
+    if ($isFirstDial && $level == 0 && empty($parts) && $isTrulyFirstInteraction) {
         $template = $storage->getRandomSmsTemplate('welcome');
         if ($template && !empty($template['template_text'])) {
             $welcomeMessage = $template['template_text'];
             // Welcome templates don't need {amount} or {reference} replacement
-            error_log("[USSD WELCOME] Sending welcome SMS to first-time user: {$msisdn}");
+            error_log("[USSD WELCOME] Sending welcome SMS to first-time user: {$msisdn} (Session: {$sessionId})");
             $smsResult = $onfonSms->send($msisdn, $welcomeMessage);
             if ($smsResult['status'] === 'success') {
                 error_log("[USSD WELCOME] Welcome SMS sent successfully to {$msisdn}");
@@ -238,6 +244,9 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
                 error_log("[USSD WELCOME] Welcome SMS failed: " . ($smsResult['message'] ?? 'Unknown error'));
             }
         }
+    } elseif ($isFirstDial && $level == 0 && empty($parts) && !$isTrulyFirstInteraction) {
+        // Log when welcome would be sent but input_history shows it's not the first interaction
+        error_log("[USSD WELCOME] Skipping welcome SMS - not first interaction (input_history: '{$session['input_history']}')");
     }
     
     $response = '';
