@@ -374,15 +374,14 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
         $siblingCount = count($siblings);
         
         // Handle pagination: 98 is "MORE" option added by gateway
-        // If user selects 98, show the same menu (no pagination implemented yet)
+        // If user selects 98, skip it and continue processing the next part (if any)
+        // This allows inputs like "55*98*5" to work - 98 is ignored, 5 is processed
         if ($selection === 98) {
-            $paginationLog = "[USSD PAGINATION] Phone: {$msisdn} | Session: {$sessionId} | User selected 98 (MORE) | Total items: {$siblingCount} | Showing same menu";
+            $paginationLog = "[USSD PAGINATION] Phone: {$msisdn} | Session: {$sessionId} | User selected 98 (MORE) at part {$partIndex} | Total items: {$siblingCount} | Skipping and continuing to next selection";
             error_log($paginationLog);
             @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - ' . $paginationLog . "\n", FILE_APPEND);
-            // Show the same menu - pagination not implemented, so just refresh
-            $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $siblings);
-            $storage->updateSession($sessionId, 'campaign_menu:' . $activeCampaign['id'] . ':' . ($currentParentId ?? 'root'), $input);
-            return "CON " . $menu;
+            // Skip 98 and continue to next part in the loop
+            continue;
         }
         
         if ($selection < 1 || $selection > $siblingCount) {
