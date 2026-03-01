@@ -327,23 +327,30 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
 
     $currentParentId = null;
     $currentNode = null;
-    foreach ($parts as $part) {
+    foreach ($parts as $partIndex => $part) {
         if (!isValidNumeric($part)) {
             $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $getChildren($currentParentId));
             $storage->updateSession($sessionId, 'campaign_menu_invalid', $input);
+            error_log("[USSD MENU ERROR] Invalid non-numeric selection at part {$partIndex}: '{$part}' | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null'));
             return "CON Invalid selection. Please try again.\n" . $menu;
         }
 
         $selection = intval($part);
         $siblings = $getChildren($currentParentId);
-        if ($selection < 1 || $selection > count($siblings)) {
+        $siblingCount = count($siblings);
+        
+        if ($selection < 1 || $selection > $siblingCount) {
             $menu = $buildMenu($currentNode['prompt'] ?? $activeCampaign['root_prompt'], $siblings);
             $storage->updateSession($sessionId, 'campaign_menu_invalid', $input);
+            error_log("[USSD MENU ERROR] Selection out of range: {$selection} (valid: 1-{$siblingCount}) | Part index: {$partIndex} | Input: {$input} | CurrentParentId: " . ($currentParentId ?? 'null') . " | Available siblings: " . json_encode(array_map(function($s) { return $s['id'] . ':' . $s['label']; }, $siblings)));
             return "CON Invalid selection. Please try again.\n" . $menu;
         }
 
         $currentNode = $siblings[$selection - 1];
         $currentParentId = $currentNode['id'];
+        
+        // Log navigation for debugging
+        error_log("[USSD NAV] Part {$partIndex}: Selected {$selection} -> Node ID={$currentNode['id']}, Label={$currentNode['label']}, ActionType={$currentNode['action_type']}");
     }
 
     $children = $getChildren($currentParentId);
@@ -450,7 +457,23 @@ function handleUSSDSession($msisdn, $sessionId, $ussdCode, $input, $storage) {
             
             $result = triggerSTKPush($feeTransactionId, $formattedPhone, $feeAmount);
             
-            $resultMessage = $result ? "SUCCESS" : "FAILED";
+            // Get detailed error from transaction if failed
+            $errorDetails = '';
+            if (!$result) {
+                try {
+                    global $pdo;
+                    $stmt = $pdo->prepare("SELECT payment_failure_reason, status FROM transactions WHERE id = ?");
+                    $stmt->execute([$feeTransactionId]);
+                    $tx = $stmt->fetch();
+                    if ($tx && $tx['payment_failure_reason']) {
+                        $errorDetails = " - Error: " . $tx['payment_failure_reason'];
+                    }
+                } catch (Exception $e) {
+                    $errorDetails = " - Could not fetch error details: " . $e->getMessage();
+                }
+            }
+            
+            $resultMessage = $result ? "SUCCESS" : "FAILED" . $errorDetails;
             error_log("[STK PUSH] Result for transaction {$feeTransactionId}: {$resultMessage}");
             @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - [STK PUSH] Result: ' . $resultMessage . "\n", FILE_APPEND);
             @file_put_contents($ussdLogFile, date('Y-m-d H:i:s') . ' - [STK PUSH] Result: ' . $resultMessage . "\n", FILE_APPEND);
