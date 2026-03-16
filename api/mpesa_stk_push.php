@@ -49,6 +49,33 @@ if (!$transaction) {
     stkUserError('Transaction not found', 404);
 }
 
+// --- Payment Provider Routing ---
+// Check PAYMENT_PROVIDER env: "paystack" routes to Paystack, anything else falls through to M-Pesa
+$paymentProvider = strtolower(trim(getenv('PAYMENT_PROVIDER') ?: 'mpesa'));
+if ($paymentProvider === 'paystack') {
+    require_once __DIR__ . '/paystack-service.php';
+    $result = paystackInitiateCharge($pdo, $storage, $transactionId, $phoneNumber, $amount);
+    if ($result['success']) {
+        $logMsg = "Paystack Charge initiated: Transaction ID {$transactionId}, Reference: {$result['reference']}";
+        error_log($logMsg);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
+        jsonResponse([
+            'success'     => true,
+            'message'     => 'Payment initiated successfully (Paystack)',
+            'reference'   => $result['reference'],
+            'provider'    => 'paystack',
+        ]);
+    } else {
+        $logMsg = "Paystack Charge failed: Transaction ID {$transactionId}, Error: {$result['error']}";
+        error_log($logMsg);
+        @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
+        stkUserError($result['error'] ?: 'Payment initiation failed. Please try again later.');
+    }
+    // paystackInitiateCharge / jsonResponse / stkUserError all call exit, but just in case:
+    exit;
+}
+// --- End Provider Routing (M-Pesa continues below) ---
+
 // Get M-Pesa credentials from environment
 $consumerKey = getenv('MPESA_CONSUMER_KEY');
 $consumerSecret = getenv('MPESA_CONSUMER_SECRET');

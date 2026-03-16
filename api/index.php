@@ -66,6 +66,11 @@ if (preg_match('#^/api/mpesa/stk-push$#', $path) && $requestMethod === 'POST') {
     exit;
 }
 
+if (preg_match('#^/api/paystack/webhook$#', $path) && $requestMethod === 'POST') {
+    require __DIR__ . '/paystack-webhook.php';
+    exit;
+}
+
 if (preg_match('#^/api/public/#', $path)) {
     require __DIR__ . '/public.php';
     exit;
