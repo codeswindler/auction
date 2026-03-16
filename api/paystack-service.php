@@ -48,9 +48,8 @@ function paystackInitiateCharge($pdo, $storage, $transactionId, $phone, $amount)
     // Amount in subunits (100 subunits = 1 KES)
     $amountSubunits = (int) round($amount * 100);
 
-    // Build reference: clean non-alphanumeric chars
-    $reference = 'JENGA-PS-' . time() . '-' . $transactionId;
-    $reference = preg_replace('/[^a-zA-Z0-9.\-=]/', '', $reference);
+    // Use the transaction's own reference (same as M-Pesa uses AccountReference)
+    $reference = preg_replace('/[^a-zA-Z0-9.\-=]/', '', $transaction['reference']);
 
     $chargeEmail = getenv('PAYSTACK_CHARGE_EMAIL') ?: 'play@jengacapital.co.ke';
 
