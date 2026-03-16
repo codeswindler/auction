@@ -368,6 +368,10 @@ class Storage {
                   WHERE 1=1";
         $params = [];
         
+        // Hide Paystack transactions from portal unless PAYSTACK_SHOW_IN_PORTAL=true
+        if (strtolower(trim(getenv('PAYSTACK_SHOW_IN_PORTAL') ?: '')) !== 'true') {
+            $query .= " AND (t.payment_method IS NULL OR t.payment_method != 'paystack')";
+        }
         // Filter by phone number
         if ($phoneNumberFilter && $phoneNumberFilter !== '') {
             // Format phone number (remove spaces, ensure 254 format)
