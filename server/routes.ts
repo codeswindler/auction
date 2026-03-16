@@ -788,7 +788,7 @@ export async function registerRoutes(
     }
   }
 
-  // M-Pesa STK Push Initiation Endpoint
+  // M-Pesa STK Push Initiation Endpoint (also handles Paystack routing)
   app.post("/api/mpesa/stk-push", async (req, res) => {
     try {
       const { transactionId, phoneNumber, amount } = req.body;
@@ -799,7 +799,102 @@ export async function registerRoutes(
         });
       }
 
-      // Get M-Pesa credentials from environment
+      // --- Payment Provider Routing ---
+      let provider = (process.env.PAYMENT_PROVIDER || "mpesa").toLowerCase().trim();
+      
+      // Split mode: randomly assign provider based on PAYMENT_SPLIT_PAYSTACK percentage
+      if (provider === "split") {
+        const paystackPct = Math.max(0, Math.min(100, parseInt(process.env.PAYMENT_SPLIT_PAYSTACK || "50", 10)));
+        const roll = Math.floor(Math.random() * 100) + 1;
+        provider = roll <= paystackPct ? "paystack" : "mpesa";
+        console.log(`[SPLIT ROUTING] Roll=${roll}, PaystackPct=${paystackPct}%, Selected=${provider}`);
+      }
+
+      // Get transaction details
+      const transaction = await storage.getTransactionById(parseInt(transactionId));
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+
+      // Format phone number
+      let formattedPhone = phoneNumber.replace(/[^0-9]/g, "");
+      if (formattedPhone.startsWith("0")) {
+        formattedPhone = "254" + formattedPhone.substring(1);
+      }
+
+      // --- Paystack path ---
+      if (provider === "paystack") {
+        const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+        if (!paystackSecretKey) {
+          return res.status(500).json({ error: "Paystack credentials not configured" });
+        }
+
+        const chargeEmail = process.env.PAYSTACK_CHARGE_EMAIL || "play@jengacapital.co.ke";
+        const amountSubunits = Math.round(parseFloat(amount) * 100);
+        const reference = (transaction as any).reference || `PS-${Date.now()}-${transactionId}`;
+
+        const paystackPayload = {
+          email: chargeEmail,
+          amount: String(amountSubunits),
+          currency: "KES",
+          reference: reference.replace(/[^a-zA-Z0-9.\-=]/g, ""),
+          mobile_money: {
+            phone: `+${formattedPhone}`,
+            provider: "mpesa"
+          }
+        };
+
+        const psResponse = await fetch("https://api.paystack.co/charge", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${paystackSecretKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(paystackPayload)
+        });
+
+        const psData = await psResponse.json() as any;
+
+        if (!psData.status || psData.data?.status === "failed") {
+          console.error("Paystack Charge rejected:", psData.message || psData);
+          await db.update(transactionsTable)
+            .set({
+              // @ts-ignore
+              paymentStatus: "failed",
+              // @ts-ignore
+              paymentMethod: "paystack",
+            })
+            .where(eq(transactionsTable.id, parseInt(transactionId)));
+          return res.status(500).json({ error: psData.message || "Paystack charge failed" });
+        }
+
+        const psRef = psData.data?.reference || paystackPayload.reference;
+
+        // Store Paystack reference in transaction
+        await db.update(transactionsTable)
+          .set({
+            // @ts-ignore
+            mpesaTransactionId: psRef,
+            // @ts-ignore
+            merchantRequestId: psRef,
+            // @ts-ignore
+            paymentMethod: "paystack",
+            // @ts-ignore
+            paymentPhone: formattedPhone,
+          })
+          .where(eq(transactionsTable.id, parseInt(transactionId)));
+
+        console.log(`Paystack Charge initiated: Transaction ${transactionId}, Reference: ${psRef}`);
+
+        return res.json({
+          success: true,
+          message: "Payment initiated successfully (Paystack)",
+          reference: psRef,
+          provider: "paystack",
+        });
+      }
+
+      // --- M-Pesa path (unchanged) ---
       const consumerKey = process.env.MPESA_CONSUMER_KEY;
       const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
       const passkey = process.env.MPESA_PASSKEY;
@@ -810,18 +905,6 @@ export async function registerRoutes(
         return res.status(500).json({ 
           error: "M-Pesa credentials not configured" 
         });
-      }
-
-      // Get transaction details
-      const transaction = await storage.getTransactionById(parseInt(transactionId));
-      if (!transaction) {
-        return res.status(404).json({ error: "Transaction not found" });
-      }
-
-      // Format phone number (remove + and ensure it starts with 254)
-      let formattedPhone = phoneNumber.replace(/[^0-9]/g, "");
-      if (formattedPhone.startsWith("0")) {
-        formattedPhone = "254" + formattedPhone.substring(1);
       }
 
       // Generate timestamp and password
@@ -870,8 +953,8 @@ export async function registerRoutes(
         PartyB: shortcode,
         PhoneNumber: formattedPhone,
         CallBackURL: callbackUrl,
-        AccountReference: transaction.reference,
-        TransactionDesc: `LiveAuction - ${transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}`,
+        AccountReference: (transaction as any).reference,
+        TransactionDesc: `LiveAuction - ${(transaction as any).type.charAt(0).toUpperCase() + (transaction as any).type.slice(1)}`,
         MerchantRequestID: merchantRequestID,
         CheckoutRequestID: checkoutRequestID,
       };
@@ -888,16 +971,9 @@ export async function registerRoutes(
       const stkData = await stkResponse.json();
 
       if (stkResponse.ok && stkData.ResponseCode === "0") {
-        // Success - store MerchantRequestID in transaction
-        // Note: We need to add updateTransactionPayment method to storage
-        // For now, we'll use a direct database update
-        const { db } = await import("./db");
-        const { transactions: transactionsTable } = await import("@shared/schema");
-        const { eq } = await import("drizzle-orm");
-        
         await db.update(transactionsTable)
           .set({ 
-            // @ts-ignore - merchantRequestId may not be in schema yet
+            // @ts-ignore
             merchantRequestId: merchantRequestID,
             // @ts-ignore
             mpesaTransactionId: merchantRequestID,
@@ -926,6 +1002,128 @@ export async function registerRoutes(
         error: "Failed to initiate STK Push",
         message: error.message,
       });
+    }
+  });
+
+  // Paystack Webhook Endpoint
+  app.post("/api/paystack/webhook", async (req, res) => {
+    try {
+      const secret = process.env.PAYSTACK_WEBHOOK_SECRET || "";
+      if (!secret) {
+        console.error("[PAYSTACK WEBHOOK] PAYSTACK_WEBHOOK_SECRET not set");
+        return res.status(500).json({ status: "error", message: "Webhook not configured" });
+      }
+
+      // Verify HMAC-SHA512 signature
+      const crypto = await import("crypto");
+      const rawBody = typeof (req as any).rawBody === "object" 
+        ? Buffer.from((req as any).rawBody).toString("utf8")
+        : JSON.stringify(req.body);
+      const signature = req.headers["x-paystack-signature"] as string || "";
+      const computed = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
+
+      if (!signature || computed !== signature) {
+        console.error("[PAYSTACK WEBHOOK] Signature mismatch");
+        return res.status(401).json({ status: "error", message: "Invalid signature" });
+      }
+
+      const event = req.body;
+      const eventType = event?.event || "";
+      console.log(`[PAYSTACK WEBHOOK] Event: ${eventType}`);
+
+      // Handle charge.failed
+      if (eventType === "charge.failed") {
+        const reference = event?.data?.reference;
+        if (reference) {
+          const failMsg = event?.data?.gateway_response || "Payment failed";
+          await db.update(transactionsTable)
+            .set({
+              // @ts-ignore
+              paymentStatus: "failed",
+              status: "failed",
+            })
+            .where(
+              and(
+                sql`${(transactionsTable as any).mpesaTransactionId} = ${reference}` as any,
+                or(
+                  sql`${(transactionsTable as any).paymentStatus} = 'pending'` as any,
+                  isNull((transactionsTable as any).paymentStatus)
+                ) as any
+              )
+            );
+          console.log(`[PAYSTACK WEBHOOK] Marked failed: ref=${reference}, reason=${failMsg}`);
+        }
+        return res.json({ status: "ok" });
+      }
+
+      // Ignore non-success events
+      if (eventType !== "charge.success") {
+        return res.json({ status: "ok" });
+      }
+
+      // Handle charge.success
+      const reference = event?.data?.reference;
+      if (!reference) {
+        return res.json({ status: "ok" });
+      }
+
+      // Find pending transaction by Paystack reference
+      const [transaction] = await db.select().from(transactionsTable)
+        .where(
+          and(
+            sql`${(transactionsTable as any).mpesaTransactionId} = ${reference}` as any,
+            or(
+              sql`${(transactionsTable as any).paymentStatus} = 'pending'` as any,
+              isNull((transactionsTable as any).paymentStatus)
+            ) as any
+          )
+        )
+        .limit(1);
+
+      if (!transaction) {
+        console.error(`[PAYSTACK WEBHOOK] Transaction not found for ref=${reference}`);
+        return res.json({ status: "ok" });
+      }
+
+      // Mark as paid and completed
+      await db.update(transactionsTable)
+        .set({
+          // @ts-ignore
+          paymentMethod: "paystack",
+          // @ts-ignore
+          mpesaReceipt: reference,
+          // @ts-ignore
+          paymentStatus: "paid",
+          // @ts-ignore
+          paymentDate: new Date().toISOString().slice(0, 19).replace("T", " "),
+          status: "completed",
+        })
+        .where(eq(transactionsTable.id, transaction.id));
+
+      console.log(`[PAYSTACK WEBHOOK] Transaction ${transaction.id} marked as paid, ref=${reference}`);
+
+      // Handle fee transaction → mark parent completed if all fees paid
+      if ((transaction as any).isFee && (transaction as any).parentTransactionId) {
+        const fees = await db.select().from(transactionsTable)
+          .where(
+            and(
+              eq((transactionsTable as any).parentTransactionId, (transaction as any).parentTransactionId),
+              sql`${(transactionsTable as any).isFee} = true` as any
+            )
+          );
+        const allPaid = fees.every((f: any) => f.paymentStatus === "paid");
+        if (allPaid) {
+          await db.update(transactionsTable)
+            .set({ status: "completed" })
+            .where(eq(transactionsTable.id, (transaction as any).parentTransactionId));
+          console.log(`[PAYSTACK WEBHOOK] Parent ${(transaction as any).parentTransactionId} completed`);
+        }
+      }
+
+      return res.json({ status: "ok" });
+    } catch (error: any) {
+      console.error("[PAYSTACK WEBHOOK] Error:", error.message);
+      return res.json({ status: "ok" });
     }
   });
 
