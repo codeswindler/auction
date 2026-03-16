@@ -1005,8 +1005,8 @@ export async function registerRoutes(
     }
   });
 
-  // Paystack Webhook Endpoint
-  app.post("/api/paystack/webhook", async (req, res) => {
+  // Paystack Webhook Endpoint (both paths for compatibility)
+  const paystackWebhookHandler = async (req: any, res: any) => {
     try {
       const secret = process.env.PAYSTACK_WEBHOOK_SECRET || "";
       if (!secret) {
@@ -1125,7 +1125,9 @@ export async function registerRoutes(
       console.error("[PAYSTACK WEBHOOK] Error:", error.message);
       return res.json({ status: "ok" });
     }
-  });
+  };
+  app.post("/api/paystack/webhook", paystackWebhookHandler);
+  app.post("/payments/paystack/webhook", paystackWebhookHandler);
 
   return httpServer;
 }
