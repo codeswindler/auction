@@ -50,8 +50,20 @@ if (!$transaction) {
 }
 
 // --- Payment Provider Routing ---
-// Check PAYMENT_PROVIDER env: "paystack" routes to Paystack, anything else falls through to M-Pesa
+// PAYMENT_PROVIDER: "mpesa" (default) | "paystack" | "split"
+// In "split" mode, PAYMENT_SPLIT_PAYSTACK sets % routed to Paystack (remainder goes to M-Pesa)
 $paymentProvider = strtolower(trim(getenv('PAYMENT_PROVIDER') ?: 'mpesa'));
+
+// Resolve split mode to a concrete provider
+if ($paymentProvider === 'split') {
+    $paystackPct = max(0, min(100, (int)(getenv('PAYMENT_SPLIT_PAYSTACK') ?: 50)));
+    $roll = mt_rand(1, 100);
+    $paymentProvider = ($roll <= $paystackPct) ? 'paystack' : 'mpesa';
+    $logMsg = "[SPLIT ROUTING] Roll={$roll}, PaystackPct={$paystackPct}%, Selected={$paymentProvider}";
+    error_log($logMsg);
+    @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
+}
+
 if ($paymentProvider === 'paystack') {
     require_once __DIR__ . '/paystack-service.php';
     $result = paystackInitiateCharge($pdo, $storage, $transactionId, $phoneNumber, $amount);
@@ -71,7 +83,6 @@ if ($paymentProvider === 'paystack') {
         @file_put_contents($stkLogFile, date('Y-m-d H:i:s') . ' - ' . $logMsg . "\n", FILE_APPEND);
         stkUserError($result['error'] ?: 'Payment initiation failed. Please try again later.');
     }
-    // paystackInitiateCharge / jsonResponse / stkUserError all call exit, but just in case:
     exit;
 }
 // --- End Provider Routing (M-Pesa continues below) ---

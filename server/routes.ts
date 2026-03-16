@@ -633,6 +633,15 @@ export async function registerRoutes(
       // Build conditions
       const conditions = [];
       
+      // Hide Paystack transactions from portal unless PAYSTACK_SHOW_IN_PORTAL=true
+      if (process.env.PAYSTACK_SHOW_IN_PORTAL !== 'true') {
+        conditions.push(
+          or(
+            sql`COALESCE(${(transactionsTable as any).paymentMethod}, '') != 'paystack'` as any,
+            isNull((transactionsTable as any).paymentMethod)
+          ) as any
+        );
+      }
       // Filter by fee status
       if (isFeeFilter !== undefined && isFeeFilter !== null && isFeeFilter !== '') {
         if (isFeeFilter === 'true' || isFeeFilter === '1') {
