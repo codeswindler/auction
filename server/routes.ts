@@ -800,6 +800,10 @@ export async function registerRoutes(
       }
 
       // --- Payment Provider Routing ---
+      const { db } = await import("./db");
+      const { transactions: transactionsTable } = await import("@shared/schema");
+      const { eq, and, or, sql, isNull } = await import("drizzle-orm");
+
       let provider = (process.env.PAYMENT_PROVIDER || "mpesa").toLowerCase().trim();
       
       // Split mode: randomly assign provider based on PAYMENT_SPLIT_PAYSTACK percentage
