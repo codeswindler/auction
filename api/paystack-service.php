@@ -48,8 +48,9 @@ function paystackInitiateCharge($pdo, $storage, $transactionId, $phone, $amount)
     // Amount in subunits (100 subunits = 1 KES)
     $amountSubunits = (int) round($amount * 100);
 
-    // Use the transaction's own reference (same as M-Pesa uses AccountReference)
-    $reference = preg_replace('/[^a-zA-Z0-9.\-=]/', '', $transaction['reference']);
+    // Use the transaction's own reference + timestamp to ensure uniqueness
+    $baseRef = preg_replace('/[^a-zA-Z0-9.\-=]/', '', $transaction['reference']);
+    $reference = $baseRef . '-' . time();
 
     $chargeEmail = getenv('PAYSTACK_CHARGE_EMAIL') ?: 'play@jengacapital.co.ke';
 
@@ -63,6 +64,8 @@ function paystackInitiateCharge($pdo, $storage, $transactionId, $phone, $amount)
             'provider' => 'mpesa'
         ]
     ];
+
+    error_log("Paystack Charge payload: " . json_encode($payload));
 
     $url = 'https://api.paystack.co/charge';
     $ch = curl_init($url);
@@ -93,7 +96,10 @@ function paystackInitiateCharge($pdo, $storage, $transactionId, $phone, $amount)
     }
 
     if ($httpCode !== 200) {
-        error_log("Paystack Charge HTTP {$httpCode}: " . substr($response, 0, 500));
+        $errMsg = "Paystack Charge HTTP {$httpCode}: " . substr($response, 0, 500);
+        error_log($errMsg);
+        // Also write to STK log so it's visible
+        @file_put_contents('/var/log/stk_push.log', date('Y-m-d H:i:s') . " - {$errMsg}\n", FILE_APPEND);
         $storage->updateTransactionPayment($transactionId, [
             'payment_status' => 'failed',
             'payment_failure_reason' => "Paystack HTTP {$httpCode}",
